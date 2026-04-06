@@ -21,7 +21,14 @@ class UpdateBookmarkRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'archived' => ['required', 'boolean'],
+            'title' => ['sometimes', 'string', 'max:255'],
+            'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:5000'],
+            'tags' => ['sometimes', 'array', 'max:20'],
+            'tags.*' => ['string', 'max:50'],
+            'collection_ids' => ['sometimes', 'array'],
+            'collection_ids.*' => ['integer'],
+            'archived' => ['sometimes', 'boolean'],
         ];
     }
 }

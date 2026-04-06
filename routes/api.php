@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\BookmarkController;
+use App\Http\Controllers\Api\V1\CollectionController;
 use App\Http\Controllers\Api\V1\TagController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -15,4 +16,6 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         ->withTrashed(['update']);
 
     Route::get('tags', [TagController::class, 'index']);
+
+    Route::apiResource('collections', CollectionController::class);
 });

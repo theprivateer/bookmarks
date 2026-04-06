@@ -39,4 +39,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(Bookmark::class);
     }
+
+    /**
+     * @return HasMany<Collection, $this>
+     */
+    public function collections(): HasMany
+    {
+        return $this->hasMany(Collection::class);
+    }
 }

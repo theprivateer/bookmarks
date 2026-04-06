@@ -21,9 +21,26 @@
         </flux:sidebar.header>
 
         <flux:sidebar.nav>
-            <flux:sidebar.item icon="magnifying-glass" href="{{ route('home') }}" :current="request()->routeIs('home')">Search</flux:sidebar.item>
+            <flux:sidebar.item icon="magnifying-glass" href="{{ route('home') }}" :current="request()->routeIs('home') && !request()->query('collection')">Search</flux:sidebar.item>
             <flux:sidebar.item icon="chat-bubble-left-right" href="{{ route('chat') }}" :current="request()->routeIs('chat')">Chat</flux:sidebar.item>
         </flux:sidebar.nav>
+
+        @auth
+            @php $sidebarCollections = auth()->user()->collections()->withCount('bookmarks')->orderBy('name')->get(); @endphp
+            @if ($sidebarCollections->isNotEmpty())
+                <flux:sidebar.nav>
+                    <flux:sidebar.group heading="Collections" expandable>
+                        @foreach ($sidebarCollections as $collection)
+                            <flux:sidebar.item
+                                href="{{ route('home', ['collection' => $collection->slug]) }}"
+                                :current="request()->query('collection') === $collection->slug"
+                                badge="{{ $collection->bookmarks_count }}"
+                            >{{ $collection->name }}</flux:sidebar.item>
+                        @endforeach
+                    </flux:sidebar.group>
+                </flux:sidebar.nav>
+            @endif
+        @endauth
 
         <flux:sidebar.spacer />
 

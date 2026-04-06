@@ -8,9 +8,11 @@ use App\Http\Requests\Api\V1\UpdateBookmarkRequest;
 use App\Http\Resources\BookmarkResource;
 use App\Jobs\ProcessBookmark;
 use App\Models\Bookmark;
+use App\Models\Tag;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Str;
 
 class BookmarkController extends Controller
 {
@@ -26,6 +28,13 @@ class BookmarkController extends Controller
             ->when(
                 $request->query('tag'),
                 fn ($q, $tag) => $q->whereHas('tags', fn ($t) => $t->where('slug', $tag))
+            )
+            ->when(
+                $request->query('collection'),
+                fn ($q, $slug) => $q->whereHas(
+                    'collections',
+                    fn ($c) => $c->where('slug', $slug)->where('user_id', $request->user()->id)
+                )
             );
 
         $bookmarks = $isSearching
@@ -54,7 +63,7 @@ class BookmarkController extends Controller
     {
         abort_unless($bookmark->user_id === $request->user()->id, 404);
 
-        $bookmark->load('tags');
+        $bookmark->load('tags', 'collections');
 
         return BookmarkResource::make($bookmark);
     }
@@ -65,11 +74,43 @@ class BookmarkController extends Controller
             ->where('user_id', $request->user()->id)
             ->findOrFail($id);
 
-        if ($request->validated('archived')) {
-            $bookmark->delete();
-        } else {
-            $bookmark->restore();
+        $validated = $request->validated();
+
+        // Handle archive/restore
+        if (array_key_exists('archived', $validated)) {
+            if ($validated['archived']) {
+                $bookmark->delete();
+            } else {
+                $bookmark->restore();
+            }
         }
+
+        // Handle field updates
+        $fields = array_intersect_key($validated, array_flip(['title', 'description', 'notes']));
+        if ($fields) {
+            $bookmark->update($fields);
+        }
+
+        // Sync tags
+        if (array_key_exists('tags', $validated)) {
+            $tagIds = collect($validated['tags'])->map(
+                fn ($name) => Tag::firstOrCreate(
+                    ['slug' => Str::slug($name)],
+                    ['name' => $name],
+                )->id
+            );
+            $bookmark->tags()->sync($tagIds);
+        }
+
+        // Sync collections (validate user owns them)
+        if (array_key_exists('collection_ids', $validated)) {
+            $validIds = $request->user()->collections()
+                ->whereIn('id', $validated['collection_ids'])
+                ->pluck('id');
+            $bookmark->collections()->sync($validIds);
+        }
+
+        $bookmark->load('tags', 'collections');
 
         return BookmarkResource::make($bookmark->fresh());
     }

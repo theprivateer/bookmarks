@@ -6,9 +6,19 @@
         setShowTags(v) { this.showTags = v; localStorage.setItem('bookmarks-show-tags', v); },
     }"
 >
-    {{-- Add bookmark form --}}
-    <flux:heading size="xl" level="1">Bookmarks</flux:heading>
-    <flux:subheading>Your personal bookmark collection</flux:subheading>
+    {{-- Header --}}
+    <div class="flex items-start justify-between">
+        <div>
+            <flux:heading size="xl" level="1">Bookmarks</flux:heading>
+            <flux:subheading>Your personal bookmark collection</flux:subheading>
+        </div>
+        <flux:button
+            size="sm"
+            variant="ghost"
+            icon="folder-plus"
+            x-on:click="$flux.modal('create-collection').show()"
+        >New collection</flux:button>
+    </div>
 
     <div class="mt-6 max-w-2xl space-y-2">
         <form wire:submit="addBookmark" class="flex gap-2">
@@ -50,7 +60,7 @@
         </form>
     </div>
 
-    @if ($bookmarks->isNotEmpty() || $tagFilter !== '' || $isSearching)
+    @if ($bookmarks->isNotEmpty() || $tagFilter !== '' || $collectionFilter !== '' || $isSearching)
         {{-- Toolbar --}}
         <div class="mt-8 flex items-center justify-between mb-4">
             <div class="flex items-center gap-2">
@@ -76,6 +86,34 @@
                         wire:click="clearTagFilter"
                         class="cursor-pointer"
                     >{{ $tagFilter }}</flux:badge>
+                @endif
+                @if ($collectionFilter !== '')
+                    @php $activeCollection = $collections->firstWhere('slug', $collectionFilter); @endphp
+                    <flux:badge
+                        color="green"
+                        icon-trailing="x-mark"
+                        wire:click="$set('collectionFilter', '')"
+                        class="cursor-pointer"
+                    >{{ $activeCollection?->name ?? $collectionFilter }}</flux:badge>
+                    @if ($activeCollection)
+                        <flux:button
+                            size="sm"
+                            variant="ghost"
+                            icon="pencil-square"
+                            wire:click="editCollection({{ $activeCollection->id }})"
+                            class="text-zinc-400 hover:text-blue-500"
+                            title="Rename collection"
+                        />
+                        <flux:button
+                            size="sm"
+                            variant="ghost"
+                            icon="trash"
+                            wire:click="deleteCollection({{ $activeCollection->id }})"
+                            wire:confirm="Delete this collection? Bookmarks will not be deleted."
+                            class="text-zinc-400 hover:text-red-500"
+                            title="Delete collection"
+                        />
+                    @endif
                 @endif
             </div>
 
@@ -204,7 +242,21 @@
                                             </flux:text>
                                         @endif
 
-                                        <div class="mt-3 flex justify-end">
+                                        {{-- Notes --}}
+                                        @if ($bookmark->notes)
+                                            <flux:text class="text-sm text-zinc-400 dark:text-zinc-500 line-clamp-2 italic mt-1">
+                                                {{ $bookmark->notes }}
+                                            </flux:text>
+                                        @endif
+
+                                        <div class="mt-3 flex justify-end gap-1">
+                                            <flux:button
+                                                size="sm"
+                                                variant="ghost"
+                                                icon="pencil-square"
+                                                wire:click="editBookmark({{ $bookmark->id }})"
+                                                class="text-zinc-400 hover:text-blue-500"
+                                            />
                                             <flux:button
                                                 size="sm"
                                                 variant="ghost"
@@ -252,6 +304,9 @@
                                             @elseif ($bookmark->status === 'failed')
                                                 <flux:badge color="red" size="sm">Failed</flux:badge>
                                             @endif
+                                            @if ($bookmark->notes)
+                                                <flux:icon name="document-text" class="size-3.5 text-zinc-400" title="Has notes" />
+                                            @endif
                                         </div>
                                         <div class="flex items-center gap-2 mt-0.5 flex-wrap">
                                             <span class="text-xs text-zinc-400 dark:text-zinc-500 shrink-0">{{ $bookmark->domain }}</span>
@@ -270,15 +325,24 @@
                                         </div>
                                     </div>
 
-                                    {{-- Delete --}}
-                                    <flux:button
-                                        size="sm"
-                                        variant="ghost"
-                                        icon="trash"
-                                        wire:click="deleteBookmark({{ $bookmark->id }})"
-                                        wire:confirm="Delete this bookmark?"
-                                        class="shrink-0 text-zinc-400 hover:text-red-500"
-                                    />
+                                    {{-- Actions --}}
+                                    <div class="flex gap-1 shrink-0">
+                                        <flux:button
+                                            size="sm"
+                                            variant="ghost"
+                                            icon="pencil-square"
+                                            wire:click="editBookmark({{ $bookmark->id }})"
+                                            class="text-zinc-400 hover:text-blue-500"
+                                        />
+                                        <flux:button
+                                            size="sm"
+                                            variant="ghost"
+                                            icon="trash"
+                                            wire:click="deleteBookmark({{ $bookmark->id }})"
+                                            wire:confirm="Delete this bookmark?"
+                                            class="text-zinc-400 hover:text-red-500"
+                                        />
+                                    </div>
                                 </div>
                             @endforeach
                         </div>
@@ -300,9 +364,13 @@
                             </flux:subheading>
                         @else
                             <flux:icon name="tag" class="size-10 mx-auto text-zinc-300 dark:text-zinc-600 mb-3" />
-                            <flux:heading size="lg">No bookmarks with this tag</flux:heading>
+                            <flux:heading size="lg">No bookmarks with this filter</flux:heading>
                             <flux:subheading class="mt-1">
-                                <flux:button variant="ghost" wire:click="clearTagFilter">Clear filter</flux:button>
+                                @if ($collectionFilter !== '')
+                                    <flux:button variant="ghost" wire:click="$set('collectionFilter', '')">Clear filter</flux:button>
+                                @else
+                                    <flux:button variant="ghost" wire:click="clearTagFilter">Clear filter</flux:button>
+                                @endif
                             </flux:subheading>
                         @endif
                     </div>
@@ -319,4 +387,88 @@
             <flux:subheading class="mt-1">Paste a URL above to save your first bookmark.</flux:subheading>
         </div>
     @endif
+
+    {{-- Edit bookmark modal --}}
+    <flux:modal name="edit-bookmark" class="md:w-96">
+        <form wire:submit="updateBookmark" class="space-y-4">
+            <flux:heading size="lg">Edit bookmark</flux:heading>
+
+            <flux:field>
+                <flux:label>Title</flux:label>
+                <flux:input wire:model="editTitle" />
+                <flux:error name="editTitle" />
+            </flux:field>
+
+            <flux:field>
+                <flux:label>Description</flux:label>
+                <flux:textarea wire:model="editDescription" rows="3" />
+                <flux:error name="editDescription" />
+            </flux:field>
+
+            <flux:field>
+                <flux:label>Notes</flux:label>
+                <flux:textarea wire:model="editNotes" rows="3" placeholder="Your personal notes..." />
+                <flux:error name="editNotes" />
+            </flux:field>
+
+            <flux:field>
+                <flux:label>Tags</flux:label>
+                <flux:input wire:model="editTags" placeholder="laravel, php, testing" />
+                <flux:description>Comma-separated</flux:description>
+                <flux:error name="editTags" />
+            </flux:field>
+
+            @if ($collections->isNotEmpty())
+                <flux:field>
+                    <flux:label>Collections</flux:label>
+                    <flux:checkbox.group wire:model="editCollectionIds">
+                        @foreach ($collections as $collection)
+                            <flux:checkbox :label="$collection->name" :value="$collection->id" />
+                        @endforeach
+                    </flux:checkbox.group>
+                </flux:field>
+            @endif
+
+            <div class="flex justify-end gap-2">
+                <flux:button variant="ghost" x-on:click="$flux.modal('edit-bookmark').close()">Cancel</flux:button>
+                <flux:button type="submit" variant="primary">Save</flux:button>
+            </div>
+        </form>
+    </flux:modal>
+
+    {{-- Create collection modal --}}
+    <flux:modal name="create-collection" class="md:w-80">
+        <form wire:submit="createCollection" class="space-y-4">
+            <flux:heading size="lg">New collection</flux:heading>
+
+            <flux:field>
+                <flux:label>Name</flux:label>
+                <flux:input wire:model="newCollectionName" placeholder="e.g. Laravel Resources" />
+                <flux:error name="newCollectionName" />
+            </flux:field>
+
+            <div class="flex justify-end gap-2">
+                <flux:button variant="ghost" x-on:click="$flux.modal('create-collection').close()">Cancel</flux:button>
+                <flux:button type="submit" variant="primary">Create</flux:button>
+            </div>
+        </form>
+    </flux:modal>
+
+    {{-- Edit collection modal --}}
+    <flux:modal name="edit-collection" class="md:w-80">
+        <form wire:submit="updateCollection" class="space-y-4">
+            <flux:heading size="lg">Rename collection</flux:heading>
+
+            <flux:field>
+                <flux:label>Name</flux:label>
+                <flux:input wire:model="editCollectionName" />
+                <flux:error name="editCollectionName" />
+            </flux:field>
+
+            <div class="flex justify-end gap-2">
+                <flux:button variant="ghost" x-on:click="$flux.modal('edit-collection').close()">Cancel</flux:button>
+                <flux:button type="submit" variant="primary">Save</flux:button>
+            </div>
+        </form>
+    </flux:modal>
 </div>

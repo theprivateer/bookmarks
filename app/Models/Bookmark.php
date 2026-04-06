@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['url', 'domain', 'title', 'description', 'og_image_url', 'favicon_url', 'extracted_text', 'ai_summary', 'embedding', 'status'])]
+#[Fillable(['url', 'domain', 'title', 'description', 'og_image_url', 'favicon_url', 'extracted_text', 'ai_summary', 'notes', 'embedding', 'status'])]
 class Bookmark extends Model
 {
     /** @use HasFactory<BookmarkFactory> */
@@ -41,6 +41,14 @@ class Bookmark extends Model
     public function tags(): BelongsToMany
     {
         return $this->belongsToMany(Tag::class);
+    }
+
+    /**
+     * @return BelongsToMany<Collection, $this>
+     */
+    public function collections(): BelongsToMany
+    {
+        return $this->belongsToMany(Collection::class);
     }
 
     /**

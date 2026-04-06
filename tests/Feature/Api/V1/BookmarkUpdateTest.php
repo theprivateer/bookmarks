@@ -41,15 +41,14 @@ test('cannot archive another users bookmark', function () {
         ->assertNotFound();
 });
 
-test('archived field is required', function () {
+test('empty update body is accepted', function () {
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->processed()->create();
     $token = $user->createToken('test')->plainTextToken;
 
     $this->withToken($token)
         ->patchJson("/api/v1/bookmarks/{$bookmark->id}", [])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors('archived');
+        ->assertOk();
 });
 
 test('archived field must be boolean', function () {

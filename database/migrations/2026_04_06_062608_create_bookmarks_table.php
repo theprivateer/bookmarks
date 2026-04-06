@@ -22,6 +22,7 @@ return new class extends Migration
             $table->string('favicon_url', 2048)->nullable();
             $table->longText('extracted_text')->nullable();
             $table->text('ai_summary')->nullable();
+            $table->text('notes')->nullable();
             $table->vector('embedding', dimensions: 1536)->nullable()->index();
             $table->string('status')->default('pending');
             $table->softDeletes();
