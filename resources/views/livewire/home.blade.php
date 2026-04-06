@@ -210,6 +210,11 @@
                                             <flux:badge color="amber" class="self-start mb-2">Processing...</flux:badge>
                                         @elseif ($bookmark->status === 'failed')
                                             <flux:badge color="red" class="self-start mb-2">Failed</flux:badge>
+                                        @elseif ($bookmark->status === 'analysis_failed')
+                                            <div class="flex items-center gap-1 mb-2">
+                                                <flux:badge color="orange" class="self-start">Analysis failed</flux:badge>
+                                                <flux:button size="sm" variant="ghost" icon="arrow-path" wire:click="retryAnalysis({{ $bookmark->id }})" title="Retry analysis" class="text-zinc-400 hover:text-orange-500" />
+                                            </div>
                                         @endif
 
                                         <flux:heading level="3" class="line-clamp-2 mb-1">
@@ -303,6 +308,9 @@
                                                 <flux:badge color="amber" size="sm">Processing...</flux:badge>
                                             @elseif ($bookmark->status === 'failed')
                                                 <flux:badge color="red" size="sm">Failed</flux:badge>
+                                            @elseif ($bookmark->status === 'analysis_failed')
+                                                <flux:badge color="orange" size="sm">Analysis failed</flux:badge>
+                                                <flux:button size="sm" variant="ghost" icon="arrow-path" wire:click="retryAnalysis({{ $bookmark->id }})" title="Retry analysis" class="text-zinc-400 hover:text-orange-500" />
                                             @endif
                                             @if ($bookmark->notes)
                                                 <flux:icon name="document-text" class="size-3.5 text-zinc-400" title="Has notes" />

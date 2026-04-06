@@ -1,10 +1,12 @@
 <?php
 
+use App\Jobs\AnalyseBookmark;
 use App\Jobs\ProcessBookmark;
 use App\Livewire\Home;
 use App\Models\Bookmark;
 use App\Models\Tag;
 use App\Models\User;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Embeddings;
 use Livewire\Livewire;
@@ -233,4 +235,56 @@ test('search validates max length', function () {
         ->set('search', str_repeat('a', 501))
         ->call('searchBookmarks')
         ->assertHasErrors(['search']);
+});
+
+test('analysis failed bookmarks show retry button', function () {
+    $user = User::factory()->create();
+    Bookmark::factory()->for($user)->analysisFailed()->create(['title' => 'Broken Analysis']);
+
+    Livewire::actingAs($user)
+        ->test(Home::class)
+        ->assertSee('Analysis failed')
+        ->assertSee('Broken Analysis');
+});
+
+test('can retry analysis for analysis_failed bookmark', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->analysisFailed()->create();
+
+    Livewire::actingAs($user)
+        ->test(Home::class)
+        ->call('retryAnalysis', $bookmark->id)
+        ->assertHasNoErrors();
+
+    expect($bookmark->fresh()->status)->toBe('processed');
+    Queue::assertPushed(AnalyseBookmark::class, fn ($job) => $job->bookmarkId === $bookmark->id);
+});
+
+test('can retry analysis for processed bookmark with null summary', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'ai_summary' => null,
+        'embedding' => null,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test(Home::class)
+        ->call('retryAnalysis', $bookmark->id)
+        ->assertHasNoErrors();
+
+    Queue::assertPushed(AnalyseBookmark::class);
+});
+
+test('cannot retry analysis for a fully processed bookmark', function () {
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create();
+
+    expect(fn () => Livewire::actingAs($user)
+        ->test(Home::class)
+        ->call('retryAnalysis', $bookmark->id)
+    )->toThrow(ModelNotFoundException::class);
 });

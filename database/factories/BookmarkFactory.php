@@ -48,4 +48,14 @@ class BookmarkFactory extends Factory
             'status' => 'failed',
         ]);
     }
+
+    public function analysisFailed(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'analysis_failed',
+            'title' => fake()->sentence(),
+            'description' => fake()->paragraph(),
+            'extracted_text' => fake()->paragraphs(3, true),
+        ]);
+    }
 }

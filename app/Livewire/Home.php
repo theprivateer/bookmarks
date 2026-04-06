@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Jobs\AnalyseBookmark;
 use App\Jobs\ProcessBookmark;
 use App\Models\Tag;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -65,6 +66,15 @@ class Home extends Component
 
         $this->reset('newUrl');
         $this->resetPage();
+    }
+
+    public function retryAnalysis(int $id): void
+    {
+        $bookmark = auth()->user()->bookmarks()->needsAnalysis()->findOrFail($id);
+
+        $bookmark->update(['status' => 'processed']);
+
+        AnalyseBookmark::dispatch($bookmark->id);
     }
 
     public function deleteBookmark(int $id): void

@@ -122,7 +122,7 @@ test('job skips bookmarks with no extracted text', function () {
     Embeddings::assertNothingGenerated();
 });
 
-test('job does not change bookmark status on failure', function () {
+test('job sets status to analysis_failed on failure', function () {
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->processed()->create();
 
@@ -131,7 +131,7 @@ test('job does not change bookmark status on failure', function () {
     $job = new AnalyseBookmark($bookmark->id);
     $job->failed(new Exception('AI service unavailable'));
 
-    expect($bookmark->fresh()->status)->toBe('processed');
+    expect($bookmark->fresh()->status)->toBe('analysis_failed');
 });
 
 test('analyse bookmark is dispatched after process bookmark completes', function () {

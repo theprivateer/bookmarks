@@ -77,4 +77,25 @@ class Bookmark extends Model
     {
         return $query->where('status', 'failed');
     }
+
+    /**
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeAnalysisFailed(Builder $query): Builder
+    {
+        return $query->where('status', 'analysis_failed');
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeNeedsAnalysis(Builder $query): Builder
+    {
+        return $query->where('status', 'analysis_failed')
+            ->orWhere(fn (Builder $q) => $q->where('status', 'processed')->where(
+                fn (Builder $q) => $q->whereNull('ai_summary')->orWhereNull('embedding')
+            ));
+    }
 }

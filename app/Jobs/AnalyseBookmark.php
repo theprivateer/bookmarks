@@ -20,6 +20,12 @@ class AnalyseBookmark implements ShouldQueue
 
     public int $timeout = 60;
 
+    /**
+     * ~4 chars per token, 8191 token limit for OpenAI embedding models.
+     * Use 30,000 chars to leave headroom for token-dense content (code, URLs).
+     */
+    private const EMBEDDING_CHAR_LIMIT = 30_000;
+
     public function __construct(public int $bookmarkId)
     {
         $this->afterCommit();
@@ -61,7 +67,11 @@ class AnalyseBookmark implements ShouldQueue
 
         $bookmark->tags()->sync($tagIds);
 
-        $embeddingInput = trim(($bookmark->title ?? '').' '.$bookmark->extracted_text);
+        $embeddingInput = Str::limit(
+            trim(($bookmark->title ?? '').' '.$bookmark->extracted_text),
+            self::EMBEDDING_CHAR_LIMIT,
+        );
+
         $embeddingResponse = Embeddings::for([$embeddingInput])
             ->dimensions(1536)
             ->generate();
@@ -78,5 +88,7 @@ class AnalyseBookmark implements ShouldQueue
             'bookmark_id' => $this->bookmarkId,
             'error' => $exception?->getMessage(),
         ]);
+
+        Bookmark::where('id', $this->bookmarkId)->update(['status' => 'analysis_failed']);
     }
 }
