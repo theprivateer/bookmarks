@@ -67,8 +67,8 @@
                 @else
                     {{-- Assistant message --}}
                     <div class="flex justify-start">
-                        <div class="max-w-[75%] rounded-2xl rounded-tl-sm px-4 py-2.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm">
-                            {!! nl2br(e($message['content'])) !!}
+                        <div class="markdown-content max-w-[75%] rounded-2xl rounded-tl-sm px-4 py-2.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm">
+                            {!! Str::markdown($message['content'], ['html_input' => 'escape', 'allow_unsafe_links' => false]) !!}
                         </div>
                     </div>
                 @endif

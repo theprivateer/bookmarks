@@ -5,9 +5,9 @@ namespace App\Ai\Agents;
 use App\Models\Bookmark;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Attributes\MaxTokens;
+use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Attributes\Temperature;
-use Laravel\Ai\Attributes\UseSmartestModel;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -18,7 +18,7 @@ use Laravel\Ai\Tools\SimilaritySearch;
 use Stringable;
 
 #[Provider(Lab::OpenAI)]
-#[UseSmartestModel]
+#[Model('gpt-4o')]
 #[MaxTokens(2048)]
 #[Temperature(0.7)]
 #[MaxSteps(5)]
