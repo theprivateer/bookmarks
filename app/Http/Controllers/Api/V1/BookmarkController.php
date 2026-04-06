@@ -1,0 +1,56 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\StoreBookmarkRequest;
+use App\Http\Resources\BookmarkResource;
+use App\Models\Bookmark;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
+
+class BookmarkController extends Controller
+{
+    public function index(Request $request): AnonymousResourceCollection
+    {
+        $bookmarks = $request->user()
+            ->bookmarks()
+            ->with('tags')
+            ->latest()
+            ->paginate(15);
+
+        return BookmarkResource::collection($bookmarks);
+    }
+
+    public function store(StoreBookmarkRequest $request): BookmarkResource
+    {
+        $url = $request->validated('url');
+
+        $bookmark = $request->user()->bookmarks()->create([
+            'url' => $url,
+            'domain' => parse_url($url, PHP_URL_HOST),
+            'status' => 'pending',
+        ]);
+
+        return BookmarkResource::make($bookmark);
+    }
+
+    public function show(Request $request, Bookmark $bookmark): BookmarkResource
+    {
+        abort_unless($bookmark->user_id === $request->user()->id, 404);
+
+        $bookmark->load('tags');
+
+        return BookmarkResource::make($bookmark);
+    }
+
+    public function destroy(Request $request, Bookmark $bookmark): Response
+    {
+        abort_unless($bookmark->user_id === $request->user()->id, 404);
+
+        $bookmark->delete();
+
+        return response()->noContent();
+    }
+}

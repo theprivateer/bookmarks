@@ -1,0 +1,48 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Bookmark;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends Factory<Bookmark>
+ */
+class BookmarkFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        $url = fake()->url();
+
+        return [
+            'user_id' => User::factory(),
+            'url' => $url,
+            'domain' => parse_url($url, PHP_URL_HOST),
+            'title' => fake()->sentence(),
+            'description' => fake()->paragraph(),
+            'status' => 'pending',
+        ];
+    }
+
+    public function processed(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'processed',
+            'extracted_text' => fake()->paragraphs(3, true),
+            'ai_summary' => fake()->paragraph(),
+        ]);
+    }
+
+    public function failed(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'failed',
+        ]);
+    }
+}

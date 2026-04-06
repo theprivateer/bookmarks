@@ -1,0 +1,188 @@
+openapi: 3.1.0
+info:
+  title: Bookmarks API
+  version: 1.0.0
+  description: AI-powered bookmark management API
+
+servers:
+  - url: http://bookmarks.test/api/v1
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Sanctum API token
+
+  schemas:
+    Bookmark:
+      type: object
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+          format: uri
+        domain:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        og_image_url:
+          type: string
+          format: uri
+          nullable: true
+        favicon_url:
+          type: string
+          format: uri
+          nullable: true
+        ai_summary:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, processed, failed]
+        tags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    StoreBookmarkRequest:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+paths:
+  /bookmarks:
+    get:
+      summary: List bookmarks
+      operationId: listBookmarks
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: Paginated list of bookmarks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Bookmark'
+                  links:
+                    type: object
+                  meta:
+                    type: object
+        '401':
+          description: Unauthenticated
+
+    post:
+      summary: Create a bookmark
+      operationId: createBookmark
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreBookmarkRequest'
+      responses:
+        '201':
+          description: Bookmark created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Bookmark'
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /bookmarks/{id}:
+    get:
+      summary: Show a bookmark
+      operationId: showBookmark
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Bookmark details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Bookmark'
+        '401':
+          description: Unauthenticated
+        '404':
+          description: Bookmark not found
+
+    delete:
+      summary: Delete a bookmark
+      operationId: deleteBookmark
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Bookmark deleted
+        '401':
+          description: Unauthenticated
+        '404':
+          description: Bookmark not found
