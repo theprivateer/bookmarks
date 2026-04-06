@@ -16,15 +16,21 @@ class BookmarkController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $bookmarks = $request->user()
+        $request->validate(['q' => 'nullable|string|max:500']);
+
+        $isSearching = $request->filled('q');
+
+        $query = $request->user()
             ->bookmarks()
             ->with('tags')
             ->when(
                 $request->query('tag'),
                 fn ($q, $tag) => $q->whereHas('tags', fn ($t) => $t->where('slug', $tag))
-            )
-            ->latest()
-            ->paginate(15);
+            );
+
+        $bookmarks = $isSearching
+            ? $query->whereVectorSimilarTo('embedding', $request->query('q'), minSimilarity: 0.3)->simplePaginate(15)
+            : $query->latest()->paginate(15);
 
         return BookmarkResource::collection($bookmarks);
     }

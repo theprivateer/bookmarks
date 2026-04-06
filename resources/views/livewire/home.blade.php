@@ -10,7 +10,7 @@
     <flux:heading size="xl" level="1">Bookmarks</flux:heading>
     <flux:subheading>Your personal bookmark collection</flux:subheading>
 
-    <div class="mt-6 max-w-2xl">
+    <div class="mt-6 max-w-2xl space-y-2">
         <form wire:submit="addBookmark" class="flex gap-2">
             <div class="flex-1">
                 <flux:input
@@ -27,15 +27,48 @@
         @error('newUrl')
             <flux:text class="mt-1 text-red-500 text-sm">{{ $message }}</flux:text>
         @enderror
+
+        {{-- Search form --}}
+        <form wire:submit="searchBookmarks" class="flex gap-2">
+            <div class="flex-1">
+                <flux:input
+                    wire:model="search"
+                    type="text"
+                    placeholder="Search bookmarks..."
+                    icon="magnifying-glass"
+                    wire:loading.attr="disabled"
+                    wire:target="searchBookmarks"
+                />
+            </div>
+            @if ($isSearching)
+                <flux:button type="button" variant="ghost" icon="x-mark" wire:click="clearSearch" />
+            @endif
+            <flux:button type="submit" variant="ghost" wire:loading.attr="disabled" wire:target="searchBookmarks">
+                <span wire:loading.remove wire:target="searchBookmarks">Search</span>
+                <span wire:loading wire:target="searchBookmarks">Searching...</span>
+            </flux:button>
+        </form>
     </div>
 
-    @if ($bookmarks->isNotEmpty() || $tagFilter !== '')
+    @if ($bookmarks->isNotEmpty() || $tagFilter !== '' || $isSearching)
         {{-- Toolbar --}}
         <div class="mt-8 flex items-center justify-between mb-4">
             <div class="flex items-center gap-2">
-                <flux:text class="text-zinc-500 dark:text-zinc-400">
-                    {{ $bookmarks->total() }} {{ Str::plural('bookmark', $bookmarks->total()) }}
-                </flux:text>
+                @if ($isSearching)
+                    <flux:text class="text-zinc-500 dark:text-zinc-400">
+                        Results for
+                    </flux:text>
+                    <flux:badge
+                        color="violet"
+                        icon-trailing="x-mark"
+                        wire:click="clearSearch"
+                        class="cursor-pointer"
+                    >{{ $search }}</flux:badge>
+                @else
+                    <flux:text class="text-zinc-500 dark:text-zinc-400">
+                        {{ $bookmarks->total() }} {{ Str::plural('bookmark', $bookmarks->total()) }}
+                    </flux:text>
+                @endif
                 @if ($tagFilter !== '')
                     <flux:badge
                         color="blue"
@@ -257,13 +290,21 @@
                     </div>
 
                 @else
-                    {{-- Filtered empty state --}}
+                    {{-- Filtered/search empty state --}}
                     <div class="text-center py-12">
-                        <flux:icon name="tag" class="size-10 mx-auto text-zinc-300 dark:text-zinc-600 mb-3" />
-                        <flux:heading size="lg">No bookmarks with this tag</flux:heading>
-                        <flux:subheading class="mt-1">
-                            <flux:button variant="ghost" wire:click="clearTagFilter">Clear filter</flux:button>
-                        </flux:subheading>
+                        @if ($isSearching)
+                            <flux:icon name="magnifying-glass" class="size-10 mx-auto text-zinc-300 dark:text-zinc-600 mb-3" />
+                            <flux:heading size="lg">No results for "{{ $search }}"</flux:heading>
+                            <flux:subheading class="mt-1">
+                                <flux:button variant="ghost" wire:click="clearSearch">Clear search</flux:button>
+                            </flux:subheading>
+                        @else
+                            <flux:icon name="tag" class="size-10 mx-auto text-zinc-300 dark:text-zinc-600 mb-3" />
+                            <flux:heading size="lg">No bookmarks with this tag</flux:heading>
+                            <flux:subheading class="mt-1">
+                                <flux:button variant="ghost" wire:click="clearTagFilter">Clear filter</flux:button>
+                            </flux:subheading>
+                        @endif
                     </div>
                 @endif
 

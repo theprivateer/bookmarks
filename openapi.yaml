@@ -124,6 +124,12 @@ paths:
           description: Filter by tag slug
           schema:
             type: string
+        - name: q
+          in: query
+          description: Semantic search query — returns bookmarks ranked by meaning similarity
+          schema:
+            type: string
+            maxLength: 500
       responses:
         '200':
           description: Paginated list of bookmarks

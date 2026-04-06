@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Jobs\ProcessBookmark;
 use App\Models\Tag;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
 use Livewire\Attributes\Layout;
@@ -21,6 +22,8 @@ class Home extends Component
     public string $newUrl = '';
 
     public string $tagFilter = '';
+
+    public string $search = '';
 
     public function addBookmark(): void
     {
@@ -56,18 +59,34 @@ class Home extends Component
         $this->resetPage();
     }
 
+    public function searchBookmarks(): void
+    {
+        $this->validate(['search' => 'nullable|string|max:500']);
+        $this->resetPage();
+    }
+
+    public function clearSearch(): void
+    {
+        $this->search = '';
+        $this->resetPage();
+    }
+
     public function render(): View
     {
-        /** @var LengthAwarePaginator $bookmarks */
-        $bookmarks = auth()->user()
+        $isSearching = filled($this->search) && mb_strlen($this->search) <= 500;
+
+        $query = auth()->user()
             ->bookmarks()
             ->with('tags')
             ->when(
                 $this->tagFilter,
                 fn ($q, $tag) => $q->whereHas('tags', fn ($t) => $t->where('slug', $tag))
-            )
-            ->latest()
-            ->paginate(15);
+            );
+
+        /** @var LengthAwarePaginator|Paginator $bookmarks */
+        $bookmarks = $isSearching
+            ? $query->whereVectorSimilarTo('embedding', $this->search, minSimilarity: 0.3)->simplePaginate(15)
+            : $query->latest()->paginate(15);
 
         $hasPendingBookmarks = auth()->user()
             ->bookmarks()
@@ -84,6 +103,7 @@ class Home extends Component
             'bookmarks' => $bookmarks,
             'hasPendingBookmarks' => $hasPendingBookmarks,
             'tags' => $tags,
+            'isSearching' => $isSearching,
         ]);
     }
 }

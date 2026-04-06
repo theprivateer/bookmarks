@@ -6,6 +6,7 @@ use App\Models\Bookmark;
 use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
+use Laravel\Ai\Embeddings;
 use Livewire\Livewire;
 
 test('home page renders the add bookmark input', function () {
@@ -153,4 +154,83 @@ test('clearing tag filter shows all bookmarks', function () {
         ->call('clearTagFilter')
         ->assertSee('Laravel Post')
         ->assertSee('Python Post');
+});
+
+test('search returns bookmarks with embeddings', function () {
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+    Bookmark::factory()->for($user)->processed()->create(['title' => 'Laravel Framework']);
+
+    Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', 'php framework')
+        ->call('searchBookmarks')
+        ->assertSee('Laravel Framework');
+});
+
+test('search shows results for toolbar text', function () {
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+    Bookmark::factory()->for($user)->processed()->create(['title' => 'Some Article']);
+
+    Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', 'my query')
+        ->call('searchBookmarks')
+        ->assertSee('my query');
+});
+
+test('clearing search restores normal listing', function () {
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+    Bookmark::factory()->for($user)->processed()->create(['title' => 'Test Bookmark']);
+
+    Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', 'something')
+        ->call('searchBookmarks')
+        ->call('clearSearch')
+        ->assertSet('search', '');
+});
+
+test('search and tag filter stack together', function () {
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create(['title' => 'Laravel Article']);
+    $tag = Tag::create(['name' => 'laravel', 'slug' => 'laravel']);
+    $bookmark->tags()->attach($tag->id);
+
+    Livewire::actingAs($user)
+        ->test(Home::class)
+        ->call('filterByTag', 'laravel')
+        ->set('search', 'php framework')
+        ->call('searchBookmarks')
+        ->assertSet('tagFilter', 'laravel')
+        ->assertSet('search', 'php framework');
+});
+
+test('empty search is ignored and shows normal listing', function () {
+    $user = User::factory()->create();
+    Bookmark::factory()->for($user)->processed()->create(['title' => 'My Bookmark']);
+
+    Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', '')
+        ->call('searchBookmarks')
+        ->assertSet('isSearching', false)
+        ->assertSee('My Bookmark');
+});
+
+test('search validates max length', function () {
+    $user = User::factory()->create();
+
+    Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', str_repeat('a', 501))
+        ->call('searchBookmarks')
+        ->assertHasErrors(['search']);
 });
