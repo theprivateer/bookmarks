@@ -6,10 +6,15 @@
     "guidelines": true,
     "mcp": true,
     "nightwatch_mcp": false,
+    "packages": [
+        "laravel/ai"
+    ],
     "sail": false,
     "skills": [
         "laravel-best-practices",
+        "fluxui-development",
         "pest-testing",
-        "tailwindcss-development"
+        "tailwindcss-development",
+        "ai-sdk-development"
     ]
 }
