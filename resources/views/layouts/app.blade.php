@@ -22,6 +22,7 @@
 
         <flux:sidebar.nav>
             <flux:sidebar.item icon="magnifying-glass" href="{{ route('home') }}" :current="request()->routeIs('home')">Search</flux:sidebar.item>
+            <flux:sidebar.item icon="chat-bubble-left-right" href="{{ route('chat') }}" :current="request()->routeIs('chat')">Chat</flux:sidebar.item>
         </flux:sidebar.nav>
 
         <flux:sidebar.spacer />

@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Auth\Login;
+use App\Livewire\Chat;
 use App\Livewire\Home;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -16,3 +17,4 @@ Route::post('/logout', function () {
 })->name('logout')->middleware('auth');
 
 Route::get('/', Home::class)->name('home')->middleware('auth');
+Route::get('/chat', Chat::class)->name('chat')->middleware('auth');
