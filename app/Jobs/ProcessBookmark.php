@@ -60,6 +60,8 @@ class ProcessBookmark implements ShouldQueue
             'extracted_text' => $extractedText,
             'status' => 'processed',
         ]);
+
+        AnalyseBookmark::dispatch($bookmark->id);
     }
 
     public function failed(?Throwable $exception): void

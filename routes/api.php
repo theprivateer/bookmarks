@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\BookmarkController;
+use App\Http\Controllers\Api\V1\TagController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -12,4 +13,6 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::apiResource('bookmarks', BookmarkController::class)
         ->only(['index', 'store', 'show', 'update', 'destroy'])
         ->withTrashed(['update']);
+
+    Route::get('tags', [TagController::class, 'index']);
 });

@@ -65,6 +65,18 @@ components:
           format: date-time
           nullable: true
 
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        bookmarks_count:
+          type: integer
+
     UpdateBookmarkRequest:
       type: object
       required:
@@ -107,6 +119,11 @@ paths:
           schema:
             type: integer
             default: 1
+        - name: tag
+          in: query
+          description: Filter by tag slug
+          schema:
+            type: string
       responses:
         '200':
           description: Paginated list of bookmarks
@@ -231,3 +248,22 @@ paths:
           description: Unauthenticated
         '404':
           description: Bookmark not found
+
+  /tags:
+    get:
+      summary: List tags with bookmark counts
+      operationId: listTags
+      responses:
+        '200':
+          description: List of tags
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tag'
+        '401':
+          description: Unauthenticated

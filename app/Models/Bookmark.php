@@ -11,11 +11,21 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['url', 'domain', 'title', 'description', 'og_image_url', 'favicon_url', 'extracted_text', 'ai_summary', 'status'])]
+#[Fillable(['url', 'domain', 'title', 'description', 'og_image_url', 'favicon_url', 'extracted_text', 'ai_summary', 'embedding', 'status'])]
 class Bookmark extends Model
 {
     /** @use HasFactory<BookmarkFactory> */
     use HasFactory, SoftDeletes;
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'embedding' => 'array',
+        ];
+    }
 
     /**
      * @return BelongsTo<User, $this>

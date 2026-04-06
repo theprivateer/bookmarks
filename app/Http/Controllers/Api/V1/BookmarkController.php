@@ -19,6 +19,10 @@ class BookmarkController extends Controller
         $bookmarks = $request->user()
             ->bookmarks()
             ->with('tags')
+            ->when(
+                $request->query('tag'),
+                fn ($q, $tag) => $q->whereHas('tags', fn ($t) => $t->where('slug', $tag))
+            )
             ->latest()
             ->paginate(15);
 

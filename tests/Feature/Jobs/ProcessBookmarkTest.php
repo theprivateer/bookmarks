@@ -46,6 +46,8 @@ function makeHtml(array $options = []): string
 }
 
 test('job extracts title from title tag', function () {
+    Queue::fake();
+
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->create([
         'url' => 'https://example.com',
@@ -62,6 +64,8 @@ test('job extracts title from title tag', function () {
 });
 
 test('job extracts og:description and falls back to meta description', function () {
+    Queue::fake();
+
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->create([
         'url' => 'https://example.com',
@@ -79,6 +83,8 @@ test('job extracts og:description and falls back to meta description', function 
 });
 
 test('job falls back to meta description when no og:description', function () {
+    Queue::fake();
+
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->create([
         'url' => 'https://example.com',
@@ -96,6 +102,8 @@ test('job falls back to meta description when no og:description', function () {
 });
 
 test('job extracts og:image and resolves relative urls', function () {
+    Queue::fake();
+
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->create([
         'url' => 'https://example.com/page',
@@ -113,6 +121,8 @@ test('job extracts og:image and resolves relative urls', function () {
 });
 
 test('job falls back to google favicon when no icon link in html', function () {
+    Queue::fake();
+
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->create([
         'url' => 'https://example.com',
@@ -128,6 +138,8 @@ test('job falls back to google favicon when no icon link in html', function () {
 });
 
 test('job uses html favicon link when present', function () {
+    Queue::fake();
+
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->create([
         'url' => 'https://example.com',
@@ -145,6 +157,8 @@ test('job uses html favicon link when present', function () {
 });
 
 test('job sets status to processed on success', function () {
+    Queue::fake();
+
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->create([
         'url' => 'https://example.com',
@@ -170,6 +184,8 @@ test('failed method sets status to failed', function () {
 });
 
 test('job handles minimal html gracefully', function () {
+    Queue::fake();
+
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->create([
         'url' => 'https://example.com',
