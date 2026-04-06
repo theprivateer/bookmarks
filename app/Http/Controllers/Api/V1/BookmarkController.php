@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreBookmarkRequest;
+use App\Http\Requests\Api\V1\UpdateBookmarkRequest;
 use App\Http\Resources\BookmarkResource;
+use App\Jobs\ProcessBookmark;
 use App\Models\Bookmark;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -33,6 +35,8 @@ class BookmarkController extends Controller
             'status' => 'pending',
         ]);
 
+        ProcessBookmark::dispatch($bookmark->id);
+
         return BookmarkResource::make($bookmark);
     }
 
@@ -43,6 +47,21 @@ class BookmarkController extends Controller
         $bookmark->load('tags');
 
         return BookmarkResource::make($bookmark);
+    }
+
+    public function update(UpdateBookmarkRequest $request, int $id): BookmarkResource
+    {
+        $bookmark = Bookmark::withTrashed()
+            ->where('user_id', $request->user()->id)
+            ->findOrFail($id);
+
+        if ($request->validated('archived')) {
+            $bookmark->delete();
+        } else {
+            $bookmark->restore();
+        }
+
+        return BookmarkResource::make($bookmark->fresh());
     }
 
     public function destroy(Request $request, Bookmark $bookmark): Response

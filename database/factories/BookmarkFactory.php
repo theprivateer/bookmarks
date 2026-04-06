@@ -34,6 +34,8 @@ class BookmarkFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => 'processed',
+            'og_image_url' => fake()->imageUrl(),
+            'favicon_url' => 'https://www.google.com/s2/favicons?domain='.parse_url($attributes['url'] ?? fake()->url(), PHP_URL_HOST).'&sz=64',
             'extracted_text' => fake()->paragraphs(3, true),
             'ai_summary' => fake()->paragraph(),
         ]);

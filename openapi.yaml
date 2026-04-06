@@ -65,6 +65,15 @@ components:
           format: date-time
           nullable: true
 
+    UpdateBookmarkRequest:
+      type: object
+      required:
+        - archived
+      properties:
+        archived:
+          type: boolean
+          description: True to archive (soft delete), false to restore
+
     StoreBookmarkRequest:
       type: object
       required:
@@ -169,6 +178,42 @@ paths:
           description: Unauthenticated
         '404':
           description: Bookmark not found
+
+    patch:
+      summary: Archive or restore a bookmark
+      operationId: updateBookmark
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBookmarkRequest'
+      responses:
+        '200':
+          description: Bookmark updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Bookmark'
+        '401':
+          description: Unauthenticated
+        '404':
+          description: Bookmark not found
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
 
     delete:
       summary: Delete a bookmark

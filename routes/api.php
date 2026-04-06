@@ -10,5 +10,6 @@ Route::get('/user', function (Request $request) {
 
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::apiResource('bookmarks', BookmarkController::class)
-        ->only(['index', 'store', 'show', 'destroy']);
+        ->only(['index', 'store', 'show', 'update', 'destroy'])
+        ->withTrashed(['update']);
 });

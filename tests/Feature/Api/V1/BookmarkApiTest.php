@@ -2,6 +2,7 @@
 
 use App\Models\Bookmark;
 use App\Models\User;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 
 test('unauthenticated request returns 401', function () {
@@ -10,6 +11,8 @@ test('unauthenticated request returns 401', function () {
 });
 
 test('can create a bookmark with valid url', function () {
+    Queue::fake();
+
     Sanctum::actingAs(User::factory()->create());
 
     $this->postJson('/api/v1/bookmarks', [
@@ -22,6 +25,8 @@ test('can create a bookmark with valid url', function () {
 });
 
 test('cannot create a bookmark without url', function () {
+    Queue::fake();
+
     Sanctum::actingAs(User::factory()->create());
 
     $this->postJson('/api/v1/bookmarks', [])
@@ -30,6 +35,8 @@ test('cannot create a bookmark without url', function () {
 });
 
 test('cannot create a bookmark with invalid url', function () {
+    Queue::fake();
+
     Sanctum::actingAs(User::factory()->create());
 
     $this->postJson('/api/v1/bookmarks', [
