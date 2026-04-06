@@ -72,8 +72,6 @@ class Home extends Component
     {
         $bookmark = auth()->user()->bookmarks()->needsAnalysis()->findOrFail($id);
 
-        $bookmark->update(['status' => 'processed']);
-
         AnalyseBookmark::dispatch($bookmark->id);
     }
 

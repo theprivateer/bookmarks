@@ -21,10 +21,11 @@ class AnalyseBookmark implements ShouldQueue
     public int $timeout = 60;
 
     /**
-     * ~4 chars per token, 8191 token limit for OpenAI embedding models.
-     * Use 30,000 chars to leave headroom for token-dense content (code, URLs).
+     * OpenAI embedding models have an 8191 token limit.
+     * Token-dense content (code, URLs) can be ~2 chars/token.
+     * 15,000 chars ÷ 2 = 7,500 tokens, safely under the limit.
      */
-    private const EMBEDDING_CHAR_LIMIT = 30_000;
+    private const EMBEDDING_CHAR_LIMIT = 15_000;
 
     public function __construct(public int $bookmarkId)
     {
@@ -79,6 +80,7 @@ class AnalyseBookmark implements ShouldQueue
         $bookmark->update([
             'ai_summary' => $response['summary'],
             'embedding' => $embeddingResponse->embeddings[0],
+            'status' => 'processed',
         ]);
     }
 

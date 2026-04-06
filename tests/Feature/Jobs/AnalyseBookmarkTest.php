@@ -22,7 +22,8 @@ test('job stores ai summary on bookmark', function () {
 
     (new AnalyseBookmark($bookmark->id))->handle();
 
-    expect($bookmark->fresh()->ai_summary)->toBe('A great article about PHP.');
+    expect($bookmark->fresh()->ai_summary)->toBe('A great article about PHP.')
+        ->and($bookmark->fresh()->status)->toBe('processed');
 });
 
 test('job creates and attaches tags to bookmark', function () {
@@ -120,6 +121,21 @@ test('job skips bookmarks with no extracted text', function () {
 
     BookmarkAnalyser::assertNeverPrompted();
     Embeddings::assertNothingGenerated();
+});
+
+test('job transitions analysis_failed bookmark to processed on success', function () {
+    BookmarkAnalyser::fake([
+        ['summary' => 'Retry succeeded.', 'tags' => ['php']],
+    ]);
+    Embeddings::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->analysisFailed()->create();
+
+    (new AnalyseBookmark($bookmark->id))->handle();
+
+    expect($bookmark->fresh()->status)->toBe('processed')
+        ->and($bookmark->fresh()->ai_summary)->toBe('Retry succeeded.');
 });
 
 test('job sets status to analysis_failed on failure', function () {

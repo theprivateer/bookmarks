@@ -258,7 +258,7 @@ test('can retry analysis for analysis_failed bookmark', function () {
         ->call('retryAnalysis', $bookmark->id)
         ->assertHasNoErrors();
 
-    expect($bookmark->fresh()->status)->toBe('processed');
+    expect($bookmark->fresh()->status)->toBe('analysis_failed');
     Queue::assertPushed(AnalyseBookmark::class, fn ($job) => $job->bookmarkId === $bookmark->id);
 });
 
