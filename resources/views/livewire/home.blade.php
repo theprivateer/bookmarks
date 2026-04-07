@@ -196,6 +196,10 @@
                                             alt=""
                                             class="w-full h-36 object-cover"
                                         >
+                                    @elseif ($bookmark->favicon_url)
+                                        <div class="w-full h-36 bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center">
+                                            <img src="{{ $bookmark->favicon_url }}" alt="" class="size-8">
+                                        </div>
                                     @else
                                         <div class="w-full h-36 bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center">
                                             <span class="text-3xl font-bold text-zinc-400 dark:text-zinc-500 uppercase">
