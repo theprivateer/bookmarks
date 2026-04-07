@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\Agents\BookmarkAnalyser;
+use App\Ai\Agents\BookmarkAnalysisSynthesizer;
 use App\Jobs\AnalyseBookmark;
 use App\Jobs\ProcessBookmark;
 use App\Models\Bookmark;
@@ -15,6 +16,7 @@ test('job stores ai summary on bookmark', function () {
     BookmarkAnalyser::fake([
         ['summary' => 'A great article about PHP.', 'tags' => ['php']],
     ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
     Embeddings::fake();
 
     $user = User::factory()->create();
@@ -30,6 +32,7 @@ test('job creates and attaches tags to bookmark', function () {
     BookmarkAnalyser::fake([
         ['summary' => 'An article.', 'tags' => ['laravel', 'php', 'open-source']],
     ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
     Embeddings::fake();
 
     $user = User::factory()->create();
@@ -47,6 +50,7 @@ test('job caps tags at 5', function () {
     BookmarkAnalyser::fake([
         ['summary' => 'Article.', 'tags' => ['one', 'two', 'three', 'four', 'five', 'six']],
     ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
     Embeddings::fake();
 
     $user = User::factory()->create();
@@ -61,6 +65,7 @@ test('job generates and stores embedding', function () {
     BookmarkAnalyser::fake([
         ['summary' => 'An article.', 'tags' => ['php']],
     ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
     Embeddings::fake();
 
     $user = User::factory()->create();
@@ -77,6 +82,7 @@ test('job reuses existing tags by slug', function () {
     BookmarkAnalyser::fake([
         ['summary' => 'Article.', 'tags' => ['laravel']],
     ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
     Embeddings::fake();
 
     $existingTag = Tag::create(['name' => 'laravel', 'slug' => 'laravel']);
@@ -95,6 +101,7 @@ test('job is idempotent — syncing tags on retry does not duplicate', function 
         ['summary' => 'Article.', 'tags' => ['laravel', 'php']],
         ['summary' => 'Article.', 'tags' => ['laravel', 'php']],
     ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
     Embeddings::fake();
 
     $user = User::factory()->create();
@@ -109,6 +116,7 @@ test('job is idempotent — syncing tags on retry does not duplicate', function 
 
 test('job skips bookmarks with no extracted text', function () {
     BookmarkAnalyser::fake();
+    BookmarkAnalysisSynthesizer::fake();
     Embeddings::fake();
 
     $user = User::factory()->create();
@@ -127,6 +135,7 @@ test('job transitions analysis_failed bookmark to processed on success', functio
     BookmarkAnalyser::fake([
         ['summary' => 'Retry succeeded.', 'tags' => ['php']],
     ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
     Embeddings::fake();
 
     $user = User::factory()->create();
@@ -148,6 +157,154 @@ test('job sets status to analysis_failed on failure', function () {
     $job->failed(new Exception('AI service unavailable'));
 
     expect($bookmark->fresh()->status)->toBe('analysis_failed');
+});
+
+test('job synthesizes summary and tags from multiple analysis chunks', function () {
+    config()->set('ai.bookmark_analysis.analysis_chunk_budget', 120);
+    config()->set('ai.bookmark_analysis.embedding_chunk_budget', 120);
+    config()->set('ai.bookmark_analysis.chunk_overlap', 0);
+
+    BookmarkAnalyser::fake([
+        ['summary' => 'Chunk one summary.', 'tags' => ['laravel', 'php']],
+        ['summary' => 'Chunk two summary.', 'tags' => ['queues', 'jobs']],
+    ]);
+    BookmarkAnalysisSynthesizer::fake([
+        ['summary' => 'Final synthesized summary.', 'tags' => ['laravel', 'php', 'queues', 'jobs']],
+    ]);
+    Embeddings::fake([
+        [array_fill(0, 1536, 1.0)],
+        [array_fill(0, 1536, 1.0)],
+    ]);
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'title' => 'Long Laravel article',
+        'description' => 'A deep dive into queues.',
+        'extracted_text' => implode("\n\n", [
+            str_repeat('Laravel queues help coordinate long running work. ', 3),
+            str_repeat('Jobs, batching, retries, and workers all matter in production. ', 3),
+        ]),
+    ]);
+
+    (new AnalyseBookmark($bookmark->id))->handle();
+
+    BookmarkAnalysisSynthesizer::assertPrompted(function ($prompt) {
+        return $prompt->contains('Chunk one summary.')
+            && $prompt->contains('Chunk two summary.')
+            && $prompt->contains('Candidate tags:')
+            && ! $prompt->contains('coordinate long running work');
+    });
+
+    expect($bookmark->fresh()->ai_summary)->toBe('Final synthesized summary.')
+        ->and($bookmark->fresh()->tags->pluck('slug')->all())->toBe(['laravel', 'php', 'queues', 'jobs']);
+});
+
+test('job aggregates embeddings generated from multiple chunks', function () {
+    config()->set('ai.bookmark_analysis.embedding_chunk_budget', 120);
+    config()->set('ai.bookmark_analysis.chunk_overlap', 0);
+
+    BookmarkAnalyser::fake([
+        ['summary' => 'Chunked article.', 'tags' => ['php']],
+    ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
+    Embeddings::fake(function ($prompt) {
+        $vector = array_fill(0, 1536, 0.0);
+
+        if ($prompt->contains('First chunk marker')) {
+            $vector[0] = 1.0;
+
+            return [$vector];
+        }
+
+        if ($prompt->contains('Second chunk marker')) {
+            $vector[1] = 1.0;
+
+            return [$vector];
+        }
+
+        $vector[2] = 1.0;
+
+        return [$vector];
+    });
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'title' => 'Embedding chunks',
+        'extracted_text' => implode("\n\n", [
+            'First chunk marker. '.str_repeat('alpha ', 60),
+            'Second chunk marker. '.str_repeat('beta ', 60),
+        ]),
+    ]);
+
+    (new AnalyseBookmark($bookmark->id))->handle();
+
+    Embeddings::assertGenerated(fn ($prompt) => $prompt->contains('First chunk marker'));
+    Embeddings::assertGenerated(fn ($prompt) => $prompt->contains('Second chunk marker'));
+
+    expect($bookmark->fresh()->embedding)->toHaveCount(1536)
+        ->and(round($bookmark->fresh()->embedding[0], 6))->toBeGreaterThan(0.0)
+        ->and(round($bookmark->fresh()->embedding[1], 6))->toBeGreaterThan(0.0)
+        ->and(round($bookmark->fresh()->embedding[0], 6))->toBe(round($bookmark->fresh()->embedding[1], 6));
+});
+
+test('job splits embedding chunks again when provider rejects oversized input', function () {
+    config()->set('ai.bookmark_analysis.analysis_chunk_budget', 5000);
+    config()->set('ai.bookmark_analysis.embedding_chunk_budget', 220);
+    config()->set('ai.bookmark_analysis.chunk_overlap', 0);
+
+    BookmarkAnalyser::fake([
+        ['summary' => 'Dense content.', 'tags' => ['php']],
+    ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
+
+    Embeddings::fake(function ($prompt) {
+        static $oversizedCalls = 0;
+
+        if ($prompt->contains('Sentence 1') && $prompt->contains('Sentence 8')) {
+            $oversizedCalls++;
+
+            throw new RuntimeException("Invalid 'input[0]': maximum input length is 8192 tokens.");
+        }
+
+        return [[1.0, ...array_fill(0, 1535, 0.0)]];
+    });
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'title' => 'Dense page',
+        'extracted_text' => implode(' ', array_map(
+            fn (int $index): string => "Sentence {$index} with OVERSIZE TOKEN MARKER and dense documentation content.",
+            range(1, 8),
+        )),
+    ]);
+
+    (new AnalyseBookmark($bookmark->id))->handle();
+
+    expect($bookmark->fresh()->status)->toBe('processed')
+        ->and($bookmark->fresh()->embedding)->toHaveCount(1536);
+});
+
+test('job skips ai calls when cleaned content is empty', function () {
+    BookmarkAnalyser::fake()->preventStrayPrompts();
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
+    Embeddings::fake()->preventStrayEmbeddings();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'title' => null,
+        'description' => null,
+        'extracted_text' => "https://example.com/docs https://example.com/api https://example.com/blog\n\nHome | Docs | Blog | API",
+        'ai_summary' => null,
+        'embedding' => null,
+    ]);
+
+    (new AnalyseBookmark($bookmark->id))->handle();
+
+    BookmarkAnalyser::assertNeverPrompted();
+    BookmarkAnalysisSynthesizer::assertNeverPrompted();
+    Embeddings::assertNothingGenerated();
+    expect($bookmark->fresh()->ai_summary)->toBeNull()
+        ->and($bookmark->fresh()->embedding)->toBeNull();
 });
 
 test('analyse bookmark is dispatched after process bookmark completes', function () {

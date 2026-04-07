@@ -38,6 +38,14 @@ return [
         ],
     ],
 
+    'bookmark_analysis' => [
+        'analysis_chunk_budget' => env('AI_BOOKMARK_ANALYSIS_CHUNK_BUDGET', 6000),
+        'embedding_chunk_budget' => env('AI_BOOKMARK_EMBEDDING_CHUNK_BUDGET', 4000),
+        'chunk_overlap' => env('AI_BOOKMARK_CHUNK_OVERLAP', 500),
+        'max_chunks' => env('AI_BOOKMARK_MAX_CHUNKS', 12),
+        'max_candidate_tags' => env('AI_BOOKMARK_MAX_CANDIDATE_TAGS', 20),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | AI Providers
