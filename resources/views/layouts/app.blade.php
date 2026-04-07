@@ -45,6 +45,7 @@
         <flux:sidebar.spacer />
 
         <flux:sidebar.nav>
+            <flux:sidebar.item icon="user-circle" href="{{ route('account') }}" :current="request()->routeIs('account')">Account</flux:sidebar.item>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <flux:sidebar.item icon="arrow-right-start-on-rectangle" type="submit">Sign out</flux:sidebar.item>
@@ -67,6 +68,7 @@
         {{ $slot }}
     </flux:main>
 
+    <flux:toast />
     @fluxScripts
 </body>
 </html>
