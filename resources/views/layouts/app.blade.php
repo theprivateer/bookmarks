@@ -53,15 +53,22 @@
         </flux:sidebar.nav>
     </flux:sidebar>
 
-    <flux:header class="lg:hidden">
-        <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
+    <flux:header class="sticky top-0 z-20 border-b border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+        <div class="flex w-full flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
+            <div class="flex items-center gap-3 lg:hidden">
+                <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
+                <div class="flex-1"></div>
 
-        <flux:spacer />
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <flux:button type="submit" variant="subtle" icon="arrow-right-start-on-rectangle" size="sm">Sign out</flux:button>
+                </form>
+            </div>
 
-        <form method="POST" action="{{ route('logout') }}">
-            @csrf
-            <flux:button type="submit" variant="subtle" icon="arrow-right-start-on-rectangle" size="sm">Sign out</flux:button>
-        </form>
+            <div class="w-full lg:ml-auto lg:max-w-2xl">
+                <livewire:header.add-bookmark />
+            </div>
+        </div>
     </flux:header>
 
     <flux:main>

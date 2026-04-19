@@ -1,13 +1,13 @@
 <?php
 
 use App\Jobs\AnalyseBookmark;
-use App\Jobs\ProcessBookmark;
+use App\Livewire\Header\AddBookmark;
 use App\Livewire\Home;
 use App\Models\Bookmark;
+use App\Models\Collection;
 use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Embeddings;
 use Livewire\Livewire;
 
@@ -17,43 +17,8 @@ test('home page renders the add bookmark input', function () {
     $this->actingAs($user)
         ->get('/')
         ->assertOk()
-        ->assertSeeLivewire(Home::class);
-});
-
-test('can add a bookmark via the form', function () {
-    Queue::fake();
-
-    $user = User::factory()->create();
-
-    Livewire::actingAs($user)
-        ->test(Home::class)
-        ->set('newUrl', 'https://example.com')
-        ->call('addBookmark')
-        ->assertHasNoErrors();
-
-    expect(Bookmark::where('url', 'https://example.com')->exists())->toBeTrue();
-
-    Queue::assertPushed(ProcessBookmark::class);
-});
-
-test('url is required when adding a bookmark', function () {
-    $user = User::factory()->create();
-
-    Livewire::actingAs($user)
-        ->test(Home::class)
-        ->set('newUrl', '')
-        ->call('addBookmark')
-        ->assertHasErrors(['newUrl' => 'required']);
-});
-
-test('url must be a valid url', function () {
-    $user = User::factory()->create();
-
-    Livewire::actingAs($user)
-        ->test(Home::class)
-        ->set('newUrl', 'not-a-url')
-        ->call('addBookmark')
-        ->assertHasErrors(['newUrl' => 'url']);
+        ->assertSeeLivewire(Home::class)
+        ->assertSeeLivewire(AddBookmark::class);
 });
 
 test('bookmarks are displayed on the home page', function () {
@@ -85,18 +50,6 @@ test('pending bookmarks show processing indicator', function () {
     Livewire::actingAs($user)
         ->test(Home::class)
         ->assertSee('Processing...');
-});
-
-test('url is reset after adding a bookmark', function () {
-    Queue::fake();
-
-    $user = User::factory()->create();
-
-    Livewire::actingAs($user)
-        ->test(Home::class)
-        ->set('newUrl', 'https://example.com')
-        ->call('addBookmark')
-        ->assertSet('newUrl', '');
 });
 
 test('tags are displayed on bookmark cards', function () {
@@ -171,6 +124,83 @@ test('search returns bookmarks with embeddings', function () {
         ->assertSee('Laravel Framework');
 });
 
+test('search returns bookmarks without embeddings via keyword match', function () {
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+
+    Bookmark::factory()->for($user)->create([
+        'status' => 'processed',
+        'title' => 'Known Bookmark',
+        'description' => 'Useful saved page',
+        'extracted_text' => 'Exact match from keyword search',
+        'embedding' => null,
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', 'Known Bookmark')
+        ->call('searchBookmarks');
+
+    $bookmarks = $component->viewData('bookmarks');
+
+    expect(collect($bookmarks->items())->pluck('title')->all())
+        ->toBe(['Known Bookmark']);
+});
+
+test('search de-duplicates bookmarks that match keyword and semantic search', function () {
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+
+    Bookmark::factory()->for($user)->processed()->create([
+        'title' => 'Laravel Framework',
+        'description' => 'Laravel notes',
+        'extracted_text' => 'Laravel framework guide',
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', 'Laravel')
+        ->call('searchBookmarks');
+
+    $bookmarks = $component->viewData('bookmarks');
+
+    expect(collect($bookmarks->items())->pluck('title')->all())
+        ->toBe(['Laravel Framework']);
+});
+
+test('search ranks keyword matches ahead of semantic only matches', function () {
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+
+    Bookmark::factory()->for($user)->create([
+        'status' => 'processed',
+        'title' => 'Knownterm Result',
+        'description' => 'Exact keyword result',
+        'extracted_text' => 'Knownterm appears here',
+        'embedding' => null,
+    ]);
+
+    Bookmark::factory()->for($user)->processed()->create([
+        'title' => 'Semantic Result',
+        'description' => 'Different text',
+        'extracted_text' => 'Nothing related',
+        'ai_summary' => 'Semantic only item',
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', 'Knownterm')
+        ->call('searchBookmarks');
+
+    $bookmarks = $component->viewData('bookmarks');
+
+    expect(collect($bookmarks->items())->pluck('title')->all())
+        ->toBe(['Knownterm Result', 'Semantic Result']);
+});
+
 test('search shows results for toolbar text', function () {
     Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
 
@@ -202,17 +232,67 @@ test('search and tag filter stack together', function () {
     Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
 
     $user = User::factory()->create();
-    $bookmark = Bookmark::factory()->for($user)->processed()->create(['title' => 'Laravel Article']);
+    $bookmark = Bookmark::factory()->for($user)->create([
+        'status' => 'processed',
+        'title' => 'Tagged Search Result',
+        'description' => 'Keyword filter match',
+        'extracted_text' => 'Tagged Search Result',
+        'embedding' => null,
+    ]);
+    Bookmark::factory()->for($user)->create([
+        'status' => 'processed',
+        'title' => 'Untagged Search Result',
+        'description' => 'Keyword filter match',
+        'extracted_text' => 'Tagged Search Result',
+        'embedding' => null,
+    ]);
     $tag = Tag::create(['name' => 'laravel', 'slug' => 'laravel']);
     $bookmark->tags()->attach($tag->id);
 
-    Livewire::actingAs($user)
+    $component = Livewire::actingAs($user)
         ->test(Home::class)
         ->call('filterByTag', 'laravel')
-        ->set('search', 'php framework')
-        ->call('searchBookmarks')
-        ->assertSet('tagFilter', 'laravel')
-        ->assertSet('search', 'php framework');
+        ->set('search', 'Tagged Search Result')
+        ->call('searchBookmarks');
+
+    $bookmarks = $component->viewData('bookmarks');
+
+    expect(collect($bookmarks->items())->pluck('title')->all())
+        ->toBe(['Tagged Search Result']);
+});
+
+test('search and collection filter stack together', function () {
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+    $collection = Collection::factory()->for($user)->create(['slug' => 'research']);
+
+    $inCollection = Bookmark::factory()->for($user)->processed()->create([
+        'title' => 'In Collection',
+        'description' => 'Different text',
+        'extracted_text' => 'Nothing related',
+        'ai_summary' => 'Semantic only item',
+    ]);
+    $inCollection->collections()->attach($collection->id);
+
+    Bookmark::factory()->for($user)->create([
+        'status' => 'processed',
+        'title' => 'Research Keyword Match',
+        'description' => 'Keyword only result',
+        'extracted_text' => 'Research Keyword Match',
+        'embedding' => null,
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('collectionFilter', 'research')
+        ->set('search', 'Research Keyword Match')
+        ->call('searchBookmarks');
+
+    $bookmarks = $component->viewData('bookmarks');
+
+    expect(collect($bookmarks->items())->pluck('title')->all())
+        ->toBe(['In Collection']);
 });
 
 test('empty search is ignored and shows normal listing', function () {

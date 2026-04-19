@@ -38,7 +38,7 @@ class BookmarkController extends Controller
             );
 
         $bookmarks = $isSearching
-            ? $query->whereVectorSimilarTo('embedding', $request->query('q'), minSimilarity: 0.3)->simplePaginate(15)
+            ? Bookmark::paginateCombinedSearch($query, $request->query('q'))
             : $query->latest()->paginate(15);
 
         return BookmarkResource::collection($bookmarks);

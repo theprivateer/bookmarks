@@ -57,7 +57,7 @@ class ProcessBookmark implements ShouldQueue
             'description' => $description,
             'og_image_url' => $ogImage,
             'favicon_url' => $favicon,
-            'extracted_text' => $extractedText,
+            'extracted_text' => trim($extractedText),
             'status' => 'processed',
         ]);
 

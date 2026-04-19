@@ -3,16 +3,14 @@
 namespace App\Livewire;
 
 use App\Jobs\AnalyseBookmark;
-use App\Jobs\ProcessBookmark;
+use App\Models\Bookmark;
 use App\Models\Tag;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
-use Livewire\Attributes\Validate;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -20,9 +18,6 @@ use Livewire\WithPagination;
 class Home extends Component
 {
     use WithPagination;
-
-    #[Validate('required|url|max:2048')]
-    public string $newUrl = '';
 
     public string $tagFilter = '';
 
@@ -51,22 +46,6 @@ class Home extends Component
     public ?int $editingCollectionId = null;
 
     public string $editCollectionName = '';
-
-    public function addBookmark(): void
-    {
-        $this->validate();
-
-        $bookmark = auth()->user()->bookmarks()->create([
-            'url' => $this->newUrl,
-            'domain' => parse_url($this->newUrl, PHP_URL_HOST),
-            'status' => 'pending',
-        ]);
-
-        ProcessBookmark::dispatch($bookmark->id);
-
-        $this->reset('newUrl');
-        $this->resetPage();
-    }
 
     public function retryAnalysis(int $id): void
     {
@@ -234,9 +213,9 @@ class Home extends Component
                 )
             );
 
-        /** @var LengthAwarePaginator|Paginator $bookmarks */
+        /** @var LengthAwarePaginator $bookmarks */
         $bookmarks = $isSearching
-            ? $query->whereVectorSimilarTo('embedding', $this->search, minSimilarity: 0.3)->simplePaginate(15)
+            ? Bookmark::paginateCombinedSearch($query, $this->search)
             : $query->latest()->paginate(15);
 
         $hasPendingBookmarks = auth()->user()

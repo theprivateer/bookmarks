@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Account;
+use App\Livewire\Header\AddBookmark;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Hash;
@@ -11,7 +12,8 @@ test('authenticated user can view account page', function () {
 
     $this->actingAs($user)
         ->get('/account')
-        ->assertOk();
+        ->assertOk()
+        ->assertSeeLivewire(AddBookmark::class);
 });
 
 test('unauthenticated user is redirected from account page', function () {

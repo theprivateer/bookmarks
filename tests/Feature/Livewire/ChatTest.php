@@ -2,6 +2,7 @@
 
 use App\Ai\Agents\BookmarkChat;
 use App\Livewire\Chat;
+use App\Livewire\Header\AddBookmark;
 use App\Models\User;
 use Livewire\Livewire;
 
@@ -11,7 +12,8 @@ test('chat page renders for authenticated users', function () {
     $this->actingAs($user)
         ->get('/chat')
         ->assertOk()
-        ->assertSeeLivewire(Chat::class);
+        ->assertSeeLivewire(Chat::class)
+        ->assertSeeLivewire(AddBookmark::class);
 });
 
 test('unauthenticated users are redirected to login', function () {

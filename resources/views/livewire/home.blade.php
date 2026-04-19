@@ -21,23 +21,6 @@
     </div>
 
     <div class="mt-6 max-w-2xl space-y-2">
-        <form wire:submit="addBookmark" class="flex gap-2">
-            <div class="flex-1">
-                <flux:input
-                    wire:model="newUrl"
-                    type="url"
-                    placeholder="https://example.com"
-                    icon="link"
-                />
-            </div>
-            <flux:button type="submit" variant="primary" icon="plus">
-                Add
-            </flux:button>
-        </form>
-        @error('newUrl')
-            <flux:text class="mt-1 text-red-500 text-sm">{{ $message }}</flux:text>
-        @enderror
-
         {{-- Search form --}}
         <form wire:submit="searchBookmarks" class="flex gap-2">
             <div class="flex-1">
