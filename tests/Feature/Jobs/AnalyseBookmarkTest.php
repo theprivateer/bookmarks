@@ -28,6 +28,50 @@ test('job stores ai summary on bookmark', function () {
         ->and($bookmark->fresh()->status)->toBe('processed');
 });
 
+test('job uses markdown text by default', function () {
+    BookmarkAnalyser::fake([
+        ['summary' => 'Summary from markdown.', 'tags' => ['markdown']],
+    ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
+    Embeddings::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'title' => 'Markdown first',
+        'extracted_text' => 'Legacy extracted source that should not be used.',
+        'markdown_text' => '# Markdown first'."\n\n".'Use this content for AI analysis.',
+    ]);
+
+    (new AnalyseBookmark($bookmark->id))->handle();
+
+    BookmarkAnalyser::assertPrompted(fn ($prompt) => $prompt->contains('Use this content for AI analysis.')
+        && ! $prompt->contains('Legacy extracted source that should not be used.'));
+    Embeddings::assertGenerated(fn ($prompt) => $prompt->contains('Use this content for AI analysis.'));
+});
+
+test('job can use extracted text when configured', function () {
+    config()->set('bookmarks.analysis_source_column', 'extracted_text');
+
+    BookmarkAnalyser::fake([
+        ['summary' => 'Summary from extracted text.', 'tags' => ['legacy']],
+    ]);
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
+    Embeddings::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'title' => 'Configured extracted source',
+        'extracted_text' => 'Use the extracted text source.',
+        'markdown_text' => 'Do not use this markdown source.',
+    ]);
+
+    (new AnalyseBookmark($bookmark->id))->handle();
+
+    BookmarkAnalyser::assertPrompted(fn ($prompt) => $prompt->contains('Use the extracted text source.')
+        && ! $prompt->contains('Do not use this markdown source.'));
+    Embeddings::assertGenerated(fn ($prompt) => $prompt->contains('Use the extracted text source.'));
+});
+
 test('job creates and attaches tags to bookmark', function () {
     BookmarkAnalyser::fake([
         ['summary' => 'An article.', 'tags' => ['laravel', 'php', 'open-source']],
@@ -123,12 +167,36 @@ test('job skips bookmarks with no extracted text', function () {
     $bookmark = Bookmark::factory()->for($user)->create([
         'status' => 'processed',
         'extracted_text' => null,
+        'markdown_text' => null,
     ]);
 
     (new AnalyseBookmark($bookmark->id))->handle();
 
     BookmarkAnalyser::assertNeverPrompted();
     Embeddings::assertNothingGenerated();
+});
+
+test('job skips bookmarks with no configured source text', function () {
+    config()->set('bookmarks.analysis_source_column', 'markdown_text');
+
+    BookmarkAnalyser::fake()->preventStrayPrompts();
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
+    Embeddings::fake()->preventStrayEmbeddings();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'extracted_text' => 'Only extracted text is present.',
+        'markdown_text' => null,
+        'ai_summary' => null,
+        'embedding' => null,
+    ]);
+
+    (new AnalyseBookmark($bookmark->id))->handle();
+
+    BookmarkAnalyser::assertNeverPrompted();
+    Embeddings::assertNothingGenerated();
+    expect($bookmark->fresh()->ai_summary)->toBeNull()
+        ->and($bookmark->fresh()->embedding)->toBeNull();
 });
 
 test('job transitions analysis_failed bookmark to processed on success', function () {
@@ -184,6 +252,10 @@ test('job synthesizes summary and tags from multiple analysis chunks', function 
             str_repeat('Laravel queues help coordinate long running work. ', 3),
             str_repeat('Jobs, batching, retries, and workers all matter in production. ', 3),
         ]),
+        'markdown_text' => implode("\n\n", [
+            str_repeat('Laravel queues help coordinate long running work. ', 3),
+            str_repeat('Jobs, batching, retries, and workers all matter in production. ', 3),
+        ]),
     ]);
 
     (new AnalyseBookmark($bookmark->id))->handle();
@@ -234,6 +306,10 @@ test('job aggregates embeddings generated from multiple chunks', function () {
             'First chunk marker. '.str_repeat('alpha ', 60),
             'Second chunk marker. '.str_repeat('beta ', 60),
         ]),
+        'markdown_text' => implode("\n\n", [
+            'First chunk marker. '.str_repeat('alpha ', 60),
+            'Second chunk marker. '.str_repeat('beta ', 60),
+        ]),
     ]);
 
     (new AnalyseBookmark($bookmark->id))->handle();
@@ -276,6 +352,10 @@ test('job splits embedding chunks again when provider rejects oversized input', 
             fn (int $index): string => "Sentence {$index} with OVERSIZE TOKEN MARKER and dense documentation content.",
             range(1, 8),
         )),
+        'markdown_text' => implode(' ', array_map(
+            fn (int $index): string => "Sentence {$index} with OVERSIZE TOKEN MARKER and dense documentation content.",
+            range(1, 8),
+        )),
     ]);
 
     (new AnalyseBookmark($bookmark->id))->handle();
@@ -294,6 +374,7 @@ test('job skips ai calls when cleaned content is empty', function () {
         'title' => null,
         'description' => null,
         'extracted_text' => "https://example.com/docs https://example.com/api https://example.com/blog\n\nHome | Docs | Blog | API",
+        'markdown_text' => "https://example.com/docs https://example.com/api https://example.com/blog\n\nHome | Docs | Blog | API",
         'ai_summary' => null,
         'embedding' => null,
     ]);

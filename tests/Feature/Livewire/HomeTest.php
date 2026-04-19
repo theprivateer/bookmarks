@@ -134,6 +134,7 @@ test('search returns bookmarks without embeddings via keyword match', function (
         'title' => 'Known Bookmark',
         'description' => 'Useful saved page',
         'extracted_text' => 'Exact match from keyword search',
+        'markdown_text' => 'Exact match from keyword search',
         'embedding' => null,
     ]);
 
@@ -148,6 +149,32 @@ test('search returns bookmarks without embeddings via keyword match', function (
         ->toBe(['Known Bookmark']);
 });
 
+test('search can use extracted text when configured', function () {
+    config()->set('bookmarks.analysis_source_column', 'extracted_text');
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+
+    Bookmark::factory()->for($user)->create([
+        'status' => 'processed',
+        'title' => 'Configured Search Result',
+        'description' => 'Uses extracted text when configured.',
+        'extracted_text' => 'keyword only in extracted text',
+        'markdown_text' => 'different markdown content',
+        'embedding' => null,
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', 'keyword only in extracted text')
+        ->call('searchBookmarks');
+
+    $bookmarks = $component->viewData('bookmarks');
+
+    expect(collect($bookmarks->items())->pluck('title')->all())
+        ->toBe(['Configured Search Result']);
+});
+
 test('search de-duplicates bookmarks that match keyword and semantic search', function () {
     Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
 
@@ -157,6 +184,7 @@ test('search de-duplicates bookmarks that match keyword and semantic search', fu
         'title' => 'Laravel Framework',
         'description' => 'Laravel notes',
         'extracted_text' => 'Laravel framework guide',
+        'markdown_text' => 'Laravel framework guide',
     ]);
 
     $component = Livewire::actingAs($user)
@@ -180,6 +208,7 @@ test('search ranks keyword matches ahead of semantic only matches', function () 
         'title' => 'Knownterm Result',
         'description' => 'Exact keyword result',
         'extracted_text' => 'Knownterm appears here',
+        'markdown_text' => 'Knownterm appears here',
         'embedding' => null,
     ]);
 
@@ -187,6 +216,7 @@ test('search ranks keyword matches ahead of semantic only matches', function () 
         'title' => 'Semantic Result',
         'description' => 'Different text',
         'extracted_text' => 'Nothing related',
+        'markdown_text' => 'Nothing related',
         'ai_summary' => 'Semantic only item',
     ]);
 
@@ -237,6 +267,7 @@ test('search and tag filter stack together', function () {
         'title' => 'Tagged Search Result',
         'description' => 'Keyword filter match',
         'extracted_text' => 'Tagged Search Result',
+        'markdown_text' => 'Tagged Search Result',
         'embedding' => null,
     ]);
     Bookmark::factory()->for($user)->create([
@@ -244,6 +275,7 @@ test('search and tag filter stack together', function () {
         'title' => 'Untagged Search Result',
         'description' => 'Keyword filter match',
         'extracted_text' => 'Tagged Search Result',
+        'markdown_text' => 'Tagged Search Result',
         'embedding' => null,
     ]);
     $tag = Tag::create(['name' => 'laravel', 'slug' => 'laravel']);
@@ -271,6 +303,7 @@ test('search and collection filter stack together', function () {
         'title' => 'In Collection',
         'description' => 'Different text',
         'extracted_text' => 'Nothing related',
+        'markdown_text' => 'Nothing related',
         'ai_summary' => 'Semantic only item',
     ]);
     $inCollection->collections()->attach($collection->id);
@@ -280,6 +313,7 @@ test('search and collection filter stack together', function () {
         'title' => 'Research Keyword Match',
         'description' => 'Keyword only result',
         'extracted_text' => 'Research Keyword Match',
+        'markdown_text' => 'Research Keyword Match',
         'embedding' => null,
     ]);
 

@@ -9,6 +9,7 @@ use fivefilters\Readability\Readability;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class ProcessBookmark implements ShouldQueue
@@ -51,6 +52,7 @@ class ProcessBookmark implements ShouldQueue
         $ogImage = $this->extractOgImage($doc, $bookmark->url);
         $favicon = $this->extractFavicon($doc, $bookmark->url, $bookmark->domain);
         $extractedText = $this->extractReadableText($html);
+        $markdownText = $this->extractMarkdown($bookmark->url);
 
         $bookmark->update([
             'title' => $title,
@@ -58,6 +60,7 @@ class ProcessBookmark implements ShouldQueue
             'og_image_url' => $ogImage,
             'favicon_url' => $favicon,
             'extracted_text' => trim($extractedText),
+            'markdown_text' => $markdownText,
             'status' => 'processed',
         ]);
 
@@ -132,6 +135,40 @@ class ProcessBookmark implements ShouldQueue
 
             return strip_tags($content);
         } catch (ParseException) {
+            return null;
+        }
+    }
+
+    private function extractMarkdown(string $url): ?string
+    {
+        try {
+            $response = Http::timeout(10)
+                ->connectTimeout(5)
+                ->retry(2, 200, throw: false)
+                ->post(config('bookmarks.markdown_service.url'), [
+                    'url' => $url,
+                    'method' => config('bookmarks.markdown_service.method', 'auto'),
+                ]);
+
+            if (! $response->successful()) {
+                Log::warning('Markdown extraction failed for bookmark', [
+                    'bookmark_url' => $url,
+                    'status_code' => $response->status(),
+                    'response_body' => $response->body(),
+                ]);
+
+                return null;
+            }
+
+            $markdown = trim($response->body());
+
+            return $markdown !== '' ? $markdown : null;
+        } catch (Throwable $exception) {
+            Log::warning('Markdown extraction failed for bookmark', [
+                'bookmark_url' => $url,
+                'error' => $exception->getMessage(),
+            ]);
+
             return null;
         }
     }

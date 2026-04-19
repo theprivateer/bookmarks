@@ -15,7 +15,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection as SupportCollection;
 
-#[Fillable(['url', 'domain', 'title', 'description', 'og_image_url', 'favicon_url', 'extracted_text', 'ai_summary', 'notes', 'embedding', 'status'])]
+#[Fillable(['url', 'domain', 'title', 'description', 'og_image_url', 'favicon_url', 'extracted_text', 'markdown_text', 'ai_summary', 'notes', 'embedding', 'status'])]
 class Bookmark extends Model
 {
     /** @use HasFactory<BookmarkFactory> */
@@ -112,10 +112,21 @@ class Bookmark extends Model
         $term = '%'.$this->escapeLike($search).'%';
 
         return $query->where(function (Builder $query) use ($term): void {
+            $analysisSourceColumn = self::analysisSourceColumn();
+
             $query->where('title', 'ilike', $term)
                 ->orWhere('description', 'ilike', $term)
-                ->orWhere('extracted_text', 'ilike', $term);
+                ->orWhere($analysisSourceColumn, 'ilike', $term);
         });
+    }
+
+    public static function analysisSourceColumn(): string
+    {
+        $column = config('bookmarks.analysis_source_column', 'markdown_text');
+
+        return in_array($column, ['extracted_text', 'markdown_text'], true)
+            ? $column
+            : 'markdown_text';
     }
 
     /**

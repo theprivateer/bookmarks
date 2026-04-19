@@ -4,7 +4,7 @@ An AI-powered bookmark manager built with Laravel 13, Livewire 4, and Flux UI. S
 
 ## Features
 
-- **Bookmark management** -- Save URLs with automatic metadata extraction (title, description, OG image, favicon, page content)
+- **Bookmark management** -- Save URLs with automatic metadata extraction (title, description, OG image, favicon, extracted text, Markdown content)
 - **AI analysis** -- Generates summaries and tags for each bookmark using OpenAI (via Laravel AI SDK)
 - **Semantic search** -- Find bookmarks by meaning using pgvector embeddings, not just keywords
 - **AI chat** -- Conversational interface to ask questions about your saved bookmarks (RAG-powered)
@@ -45,6 +45,8 @@ Copy `.env.example` to `.env` and configure:
 - **Database** -- PostgreSQL connection (`DB_CONNECTION=pgsql`)
 - **OpenAI** -- Set `OPENAI_API_KEY` for AI analysis and chat features
 - **Queue** -- Configure a queue driver (e.g. `database`, `redis`) for background processing
+- **Bookmark analysis source** -- Choose which extracted content is used for AI analysis and keyword search via `BOOKMARKS_ANALYSIS_SOURCE_COLUMN` (`markdown_text` by default)
+- **Markdown extraction service** -- Optionally override `BOOKMARKS_MARKDOWN_SERVICE_URL` or `BOOKMARKS_MARKDOWN_SERVICE_METHOD` if you need to target a different markdown extraction endpoint or extraction mode
 
 ### Development
 
@@ -59,9 +61,25 @@ Starts the web server, queue worker, log tail (Pail), and Vite dev server concur
 ### Processing Pipeline
 
 1. User submits a URL via the web UI or API
-2. `ProcessBookmark` job fetches the page, extracts metadata and text content (using Readability.php)
-3. `AnalyseBookmark` job sends extracted text to OpenAI for summary and tag generation, then generates a vector embedding
+2. `ProcessBookmark` job fetches the page, extracts metadata and readable text (using Readability.php), then requests an additional Markdown representation from `markdown.new`
+3. `AnalyseBookmark` job reads the configured source column (`markdown_text` by default, or `extracted_text`) for summary and tag generation, then generates a vector embedding
 4. Bookmark is searchable by semantic similarity and available for AI chat
+
+### Content Sources
+
+Each bookmark can store two extracted content representations:
+
+- `extracted_text` -- Readability-based plain text extraction from the fetched HTML
+- `markdown_text` -- Markdown returned by the external markdown extraction service
+
+The `BOOKMARKS_ANALYSIS_SOURCE_COLUMN` setting controls which column is used for:
+
+- AI summary generation
+- AI tag generation
+- Embedding generation
+- Keyword search matching
+
+The default is `markdown_text`.
 
 ### Bookmark Statuses
 
@@ -80,7 +98,7 @@ Starts the web server, queue worker, log tail (Pail), and Vite dev server concur
 ### Models
 
 - **User** -- Authentication, owns bookmarks and collections
-- **Bookmark** -- URL, metadata, extracted text, AI summary, vector embedding, status
+- **Bookmark** -- URL, metadata, extracted text, markdown text, AI summary, vector embedding, status
 - **Tag** -- Shared across users, linked via pivot table
 - **Collection** -- User-scoped folders for organising bookmarks
 
@@ -120,7 +138,17 @@ All API routes are under `/api/v1/` and require Sanctum authentication.
 php artisan test
 ```
 
-122 tests covering bookmark CRUD, AI analysis pipeline, semantic search, chat, collections, tag management, and API endpoints.
+The test suite covers bookmark CRUD, the extraction and AI analysis pipeline, semantic and keyword search, chat, collections, tag management, and API endpoints.
+
+## Maintenance
+
+Recalculate bookmark summaries, tags, and embeddings using the currently configured analysis source:
+
+```bash
+php artisan bookmarks:reanalyse
+```
+
+This command queues `AnalyseBookmark` for every bookmark that has content in the configured source column and skips bookmarks that do not.
 
 ## Code Style
 

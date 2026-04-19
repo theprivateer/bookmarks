@@ -36,7 +36,8 @@ class BookmarkFactory extends Factory
             'status' => 'processed',
             'og_image_url' => fake()->imageUrl(),
             'favicon_url' => 'https://www.google.com/s2/favicons?domain='.parse_url($attributes['url'] ?? fake()->url(), PHP_URL_HOST).'&sz=64',
-            'extracted_text' => fake()->paragraphs(3, true),
+            'extracted_text' => $content = fake()->paragraphs(3, true),
+            'markdown_text' => $content,
             'ai_summary' => fake()->paragraph(),
             'embedding' => array_fill(0, 1536, 0.1),
         ]);
@@ -55,7 +56,8 @@ class BookmarkFactory extends Factory
             'status' => 'analysis_failed',
             'title' => fake()->sentence(),
             'description' => fake()->paragraph(),
-            'extracted_text' => fake()->paragraphs(3, true),
+            'extracted_text' => $content = fake()->paragraphs(3, true),
+            'markdown_text' => $content,
         ]);
     }
 }

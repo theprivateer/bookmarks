@@ -40,20 +40,23 @@ class AnalyseBookmark implements ShouldQueue
     public function handle(): void
     {
         $bookmark = Bookmark::findOrFail($this->bookmarkId);
+        $sourceColumn = Bookmark::analysisSourceColumn();
+        $sourceText = $bookmark->getAttribute($sourceColumn);
 
-        if (blank($bookmark->extracted_text)) {
+        if (blank($sourceText)) {
             return;
         }
 
         $preparedContent = app(BookmarkContentPreparer::class)->prepare(
             $bookmark->title,
             $bookmark->description,
-            $bookmark->extracted_text,
+            $sourceText,
         );
 
         if ($preparedContent === null) {
             Log::warning('AnalyseBookmark skipped due to empty prepared content', [
                 'bookmark_id' => $bookmark->id,
+                'source_column' => $sourceColumn,
             ]);
 
             return;
@@ -71,6 +74,7 @@ class AnalyseBookmark implements ShouldQueue
 
         Log::info('AnalyseBookmark chunked content', [
             'bookmark_id' => $bookmark->id,
+            'source_column' => $sourceColumn,
             'analysis_chunks' => count($analysisChunks),
             'embedding_chunk_budget' => $this->embeddingChunkBudget(),
             'analysis_chunk_budget' => $this->analysisChunkBudget(),

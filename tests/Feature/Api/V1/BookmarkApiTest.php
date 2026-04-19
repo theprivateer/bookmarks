@@ -142,6 +142,7 @@ test('search returns bookmarks without embeddings via keyword match', function (
         'status' => 'processed',
         'description' => 'Useful saved page',
         'extracted_text' => 'No Embedding is searchable',
+        'markdown_text' => 'No Embedding is searchable',
         'embedding' => null,
     ]);
 
@@ -161,6 +162,7 @@ test('search de-duplicates bookmarks that match keyword and semantic search', fu
         'title' => 'Laravel Framework',
         'description' => 'Laravel notes',
         'extracted_text' => 'Laravel framework guide',
+        'markdown_text' => 'Laravel framework guide',
     ]);
 
     Sanctum::actingAs($user);
@@ -180,12 +182,14 @@ test('search ranks keyword matches ahead of semantic only matches', function () 
         'title' => 'Knownterm Result',
         'description' => 'Exact keyword result',
         'extracted_text' => 'Knownterm appears here',
+        'markdown_text' => 'Knownterm appears here',
         'embedding' => null,
     ]);
     Bookmark::factory()->for($user)->processed()->create([
         'title' => 'Semantic Result',
         'description' => 'Different text',
         'extracted_text' => 'Nothing related',
+        'markdown_text' => 'Nothing related',
         'ai_summary' => 'Semantic only item',
     ]);
 
@@ -207,6 +211,7 @@ test('search and tag filter stack together', function () {
         'title' => 'Tagged Search Result',
         'description' => 'Keyword filter match',
         'extracted_text' => 'Tagged Search Result',
+        'markdown_text' => 'Tagged Search Result',
         'embedding' => null,
     ]);
     Bookmark::factory()->for($user)->create([
@@ -214,6 +219,7 @@ test('search and tag filter stack together', function () {
         'title' => 'Untagged Search Result',
         'description' => 'Keyword filter match',
         'extracted_text' => 'Tagged Search Result',
+        'markdown_text' => 'Tagged Search Result',
         'embedding' => null,
     ]);
 
@@ -238,6 +244,7 @@ test('search and collection filter stack together', function () {
         'title' => 'In Collection',
         'description' => 'Different text',
         'extracted_text' => 'Nothing related',
+        'markdown_text' => 'Nothing related',
         'ai_summary' => 'Semantic only item',
     ]);
     $inCollection->collections()->attach($collection->id);
@@ -247,6 +254,7 @@ test('search and collection filter stack together', function () {
         'title' => 'Research Keyword Match',
         'description' => 'Keyword only result',
         'extracted_text' => 'Research Keyword Match',
+        'markdown_text' => 'Research Keyword Match',
         'embedding' => null,
     ]);
 

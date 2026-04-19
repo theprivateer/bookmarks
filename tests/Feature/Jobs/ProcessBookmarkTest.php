@@ -55,7 +55,10 @@ test('job extracts title from title tag', function () {
         'status' => 'pending',
     ]);
 
-    Http::fake(['https://example.com' => Http::response(makeHtml(['title' => 'My Test Page']))]);
+    Http::fake([
+        'https://example.com' => Http::response(makeHtml(['title' => 'My Test Page'])),
+        'https://markdown.new/' => Http::response("# My Test Page\n\nMarkdown body"),
+    ]);
 
     (new ProcessBookmark($bookmark->id))->handle();
 
@@ -212,5 +215,72 @@ test('job is dispatched when bookmark created via api', function () {
 
     Queue::assertPushed(ProcessBookmark::class, function ($job) {
         return $job->bookmarkId === Bookmark::latest()->first()->id;
+    });
+});
+
+test('job stores markdown text from markdown service', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->create([
+        'url' => 'https://example.com',
+        'domain' => 'example.com',
+        'status' => 'pending',
+    ]);
+
+    Http::fake([
+        'https://example.com' => Http::response(makeHtml(['title' => 'Markdown Page'])),
+        'https://markdown.new/' => Http::response("# Markdown Page\n\nAgent friendly content."),
+    ]);
+
+    (new ProcessBookmark($bookmark->id))->handle();
+
+    expect($bookmark->fresh()->markdown_text)->toBe("# Markdown Page\n\nAgent friendly content.");
+});
+
+test('job continues when markdown service fails', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->create([
+        'url' => 'https://example.com',
+        'domain' => 'example.com',
+        'status' => 'pending',
+    ]);
+
+    Http::fake([
+        'https://example.com' => Http::response(makeHtml(['title' => 'Fallback Page'])),
+        'https://markdown.new/' => Http::response('upstream error', 500),
+    ]);
+
+    (new ProcessBookmark($bookmark->id))->handle();
+
+    expect($bookmark->fresh()->title)->toBe('Fallback Page')
+        ->and($bookmark->fresh()->extracted_text)->not->toBeNull()
+        ->and($bookmark->fresh()->markdown_text)->toBeNull()
+        ->and($bookmark->fresh()->status)->toBe('processed');
+});
+
+test('job posts expected payload to markdown service', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->create([
+        'url' => 'https://example.com',
+        'domain' => 'example.com',
+        'status' => 'pending',
+    ]);
+
+    Http::fake([
+        'https://example.com' => Http::response(makeHtml()),
+        'https://markdown.new/' => Http::response('# Content'),
+    ]);
+
+    (new ProcessBookmark($bookmark->id))->handle();
+
+    Http::assertSent(function ($request) {
+        return $request->url() === 'https://markdown.new/'
+            && $request['url'] === 'https://example.com'
+            && $request['method'] === 'auto';
     });
 });
