@@ -57,7 +57,7 @@ test('job extracts title from title tag', function () {
 
     Http::fake([
         'https://example.com' => Http::response(makeHtml(['title' => 'My Test Page'])),
-        'https://markdown.new/' => Http::response("# My Test Page\n\nMarkdown body"),
+        'https://markdown.new/' => Http::response(['content' => "# My Test Page\n\nMarkdown body"]),
     ]);
 
     (new ProcessBookmark($bookmark->id))->handle();
@@ -230,7 +230,10 @@ test('job stores markdown text from markdown service', function () {
 
     Http::fake([
         'https://example.com' => Http::response(makeHtml(['title' => 'Markdown Page'])),
-        'https://markdown.new/' => Http::response("# Markdown Page\n\nAgent friendly content."),
+        'https://markdown.new/' => Http::response([
+            'content' => "# Markdown Page\n\nAgent friendly content.",
+            'title' => 'Markdown Page',
+        ]),
     ]);
 
     (new ProcessBookmark($bookmark->id))->handle();

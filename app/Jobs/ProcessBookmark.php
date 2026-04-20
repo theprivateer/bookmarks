@@ -160,7 +160,13 @@ class ProcessBookmark implements ShouldQueue
                 return null;
             }
 
-            $markdown = trim($response->body());
+            $markdown = $response->json('content');
+
+            if (! is_string($markdown)) {
+                return null;
+            }
+
+            $markdown = trim($markdown);
 
             return $markdown !== '' ? $markdown : null;
         } catch (Throwable $exception) {
