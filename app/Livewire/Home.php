@@ -130,6 +130,18 @@ class Home extends Component
         $this->resetPage();
     }
 
+    public function filterByCollection(string $slug): void
+    {
+        $this->collectionFilter = $slug;
+        $this->resetPage();
+    }
+
+    public function clearCollectionFilter(): void
+    {
+        $this->collectionFilter = '';
+        $this->resetPage();
+    }
+
     public function searchBookmarks(): void
     {
         $this->validate(['search' => 'nullable|string|max:500']);
@@ -200,7 +212,7 @@ class Home extends Component
 
         $query = auth()->user()
             ->bookmarks()
-            ->with('tags')
+            ->with('tags', 'collections')
             ->when(
                 $this->tagFilter,
                 fn ($q, $tag) => $q->whereHas('tags', fn ($t) => $t->where('slug', $tag))

@@ -75,7 +75,7 @@
                     <flux:badge
                         color="green"
                         icon-trailing="x-mark"
-                        wire:click="$set('collectionFilter', '')"
+                        wire:click="clearCollectionFilter"
                         class="cursor-pointer"
                     >{{ $activeCollection?->name ?? $collectionFilter }}</flux:badge>
                     @if ($activeCollection)
@@ -226,6 +226,21 @@
                                             </div>
                                         @endif
 
+                                        {{-- Collections --}}
+                                        @if ($bookmark->collections->isNotEmpty())
+                                            <div class="flex flex-wrap gap-1 mb-2">
+                                                @foreach ($bookmark->collections as $collection)
+                                                    <flux:badge
+                                                        as="button"
+                                                        color="green"
+                                                        size="sm"
+                                                        wire:click="filterByCollection('{{ $collection->slug }}')"
+                                                        class="cursor-pointer"
+                                                    >{{ $collection->name }}</flux:badge>
+                                                @endforeach
+                                            </div>
+                                        @endif
+
                                         {{-- Summary or description --}}
                                         @php $snippet = $bookmark->ai_summary ?? $bookmark->description; @endphp
                                         @if ($snippet)
@@ -246,7 +261,7 @@
                                                 size="sm"
                                                 variant="ghost"
                                                 icon="pencil-square"
-                                                wire:click="editBookmark({{ $bookmark->id }})"
+                                                wire:click.preserve-scroll="editBookmark({{ $bookmark->id }})"
                                                 class="text-zinc-400 hover:text-blue-500"
                                             />
                                             <flux:button
@@ -313,6 +328,15 @@
                                                     class="cursor-pointer"
                                                 >{{ $tag->name }}</flux:badge>
                                             @endforeach
+                                            @foreach ($bookmark->collections as $collection)
+                                                <flux:badge
+                                                    as="button"
+                                                    color="green"
+                                                    size="sm"
+                                                    wire:click="filterByCollection('{{ $collection->slug }}')"
+                                                    class="cursor-pointer"
+                                                >{{ $collection->name }}</flux:badge>
+                                            @endforeach
                                             @php $snippet = $bookmark->ai_summary ?? $bookmark->description; @endphp
                                             @if ($snippet)
                                                 <span class="text-xs text-zinc-400 dark:text-zinc-500 truncate">— {{ $snippet }}</span>
@@ -326,7 +350,7 @@
                                             size="sm"
                                             variant="ghost"
                                             icon="pencil-square"
-                                            wire:click="editBookmark({{ $bookmark->id }})"
+                                            wire:click.preserve-scroll="editBookmark({{ $bookmark->id }})"
                                             class="text-zinc-400 hover:text-blue-500"
                                         />
                                         <flux:button
@@ -362,7 +386,7 @@
                             <flux:heading size="lg">No bookmarks with this filter</flux:heading>
                             <flux:subheading class="mt-1">
                                 @if ($collectionFilter !== '')
-                                    <flux:button variant="ghost" wire:click="$set('collectionFilter', '')">Clear filter</flux:button>
+                                    <flux:button variant="ghost" wire:click="clearCollectionFilter">Clear filter</flux:button>
                                 @else
                                     <flux:button variant="ghost" wire:click="clearTagFilter">Clear filter</flux:button>
                                 @endif

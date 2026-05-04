@@ -27,6 +27,16 @@ test('can open edit modal and see bookmark data', function () {
         ->assertSet('editTags', 'laravel');
 });
 
+test('edit bookmark buttons preserve scroll position', function () {
+    $user = User::factory()->create();
+    Bookmark::factory()->for($user)->processed()->create();
+
+    $component = Livewire::actingAs($user)
+        ->test(Home::class);
+
+    expect($component->html())->toContain('wire:click.preserve-scroll');
+});
+
 test('can update title and description', function () {
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->processed()->create([

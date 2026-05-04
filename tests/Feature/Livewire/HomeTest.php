@@ -63,6 +63,33 @@ test('tags are displayed on bookmark cards', function () {
         ->assertSee('laravel');
 });
 
+test('collections are displayed on bookmark cards and can filter bookmarks', function () {
+    $user = User::factory()->create();
+    $collection = Collection::factory()->for($user)->create([
+        'name' => 'Reading List',
+        'slug' => 'reading-list',
+    ]);
+
+    $inCollection = Bookmark::factory()->for($user)->processed()->create(['title' => 'Collection Bookmark']);
+    Bookmark::factory()->for($user)->processed()->create(['title' => 'Loose Bookmark']);
+
+    $inCollection->collections()->attach($collection->id);
+
+    $component = Livewire::actingAs($user)
+        ->test(Home::class)
+        ->assertSee('Reading List')
+        ->assertSee('Collection Bookmark')
+        ->assertSee('Loose Bookmark');
+
+    expect($component->html())->toContain('filterByCollection');
+
+    $component
+        ->call('filterByCollection', 'reading-list')
+        ->assertSet('collectionFilter', 'reading-list')
+        ->assertSee('Collection Bookmark')
+        ->assertDontSee('Loose Bookmark');
+});
+
 test('tag filter shows tags in sidebar', function () {
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->processed()->create();
