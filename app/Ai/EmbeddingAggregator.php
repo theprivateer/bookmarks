@@ -14,6 +14,7 @@ class EmbeddingAggregator
             return [];
         }
 
+        // Skip averaging when there is only one vector; normalization still applies.
         if (count($vectors) === 1) {
             return $this->normalize($vectors[0]);
         }
@@ -50,6 +51,8 @@ class EmbeddingAggregator
             $vector,
         )));
 
+        // A zero-magnitude vector (all zeros) cannot be normalized; return it as-is
+        // rather than dividing by zero.
         if ($magnitude <= 0.0) {
             return array_map(fn (float|int $value): float => (float) $value, $vector);
         }

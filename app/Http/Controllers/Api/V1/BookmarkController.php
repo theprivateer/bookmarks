@@ -70,6 +70,8 @@ class BookmarkController extends Controller
 
     public function update(UpdateBookmarkRequest $request, int $id): BookmarkResource
     {
+        // withTrashed() is required so that soft-deleted (archived) bookmarks can be
+        // restored via the API without needing to re-fetch or re-process them.
         $bookmark = Bookmark::withTrashed()
             ->where('user_id', $request->user()->id)
             ->findOrFail($id);

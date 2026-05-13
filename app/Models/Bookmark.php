@@ -97,6 +97,8 @@ class Bookmark extends Model
      */
     public function scopeNeedsAnalysis(Builder $query): Builder
     {
+        // Two distinct cases: a previous analysis run explicitly failed, or the bookmark was
+        // processed but the AI step never completed (missing summary or embedding).
         return $query->where('status', 'analysis_failed')
             ->orWhere(fn (Builder $q) => $q->where('status', 'processed')->where(
                 fn (Builder $q) => $q->whereNull('ai_summary')->orWhereNull('embedding')
@@ -124,6 +126,8 @@ class Bookmark extends Model
     {
         $column = config('bookmarks.analysis_source_column', 'markdown_text');
 
+        // Whitelist prevents an unexpected config value from being interpolated
+        // directly into a query as a column name.
         return in_array($column, ['extracted_text', 'markdown_text'], true)
             ? $column
             : 'markdown_text';
@@ -138,6 +142,9 @@ class Bookmark extends Model
         int $perPage = 15,
         string $pageName = 'page',
     ): LengthAwarePaginator {
+        // Keyword and vector searches run as separate queries because there is no clean
+        // way to union an ILIKE filter with a pgvector similarity scan in a single
+        // statement. Keyword matches are prepended so exact hits rank above semantic ones.
         $keywordMatches = (clone $query)
             ->keywordSearch($search)
             ->latest()

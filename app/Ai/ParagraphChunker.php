@@ -68,6 +68,9 @@ class ParagraphChunker
                 }
             }
 
+            // max() guarantees the next chunk starts at least one segment ahead of
+            // the current one, preventing an infinite loop when the overlap is so
+            // large that rewinding would land back at or before $startIndex.
             $index = max($startIndex + 1, $index - $rewindCount);
         }
 
@@ -110,6 +113,10 @@ class ParagraphChunker
     }
 
     /**
+     * Splits a paragraph that exceeds $maxCharacters using a hierarchy of strategies:
+     * first by sentence boundaries, then by words, then character-by-character as a
+     * last resort for words that are themselves longer than the budget.
+     *
      * @return list<string>
      */
     private function splitLongSegment(string $segment, int $maxCharacters): array

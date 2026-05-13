@@ -42,6 +42,8 @@ class ProcessBookmark implements ShouldQueue
 
         $html = $response->body();
 
+        // Real-world HTML is frequently malformed; internal error capture prevents
+        // libxml warnings from being emitted to output or logs before we can clear them.
         libxml_use_internal_errors(true);
         $doc = new \DOMDocument;
         $doc->loadHTML('<?xml encoding="utf-8" ?>'.$html, LIBXML_NOERROR | LIBXML_NOWARNING);
@@ -193,6 +195,11 @@ class ProcessBookmark implements ShouldQueue
         return null;
     }
 
+    /**
+     * Converts a URL found in HTML to an absolute URL relative to the page it came from.
+     * Handles four forms: absolute (pass-through), protocol-relative (//example.com),
+     * root-relative (/path), and document-relative (../path or just file.html).
+     */
     private function resolveUrl(string $url, string $base): string
     {
         if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
@@ -211,6 +218,7 @@ class ProcessBookmark implements ShouldQueue
             return $scheme.'://'.$host.$url;
         }
 
+        // Document-relative: resolve against the directory of the base page, not its full path.
         $path = isset($parsed['path']) ? dirname($parsed['path']).'/' : '/';
 
         return $scheme.'://'.$host.$path.$url;

@@ -123,6 +123,10 @@ class AnalyseBookmark implements ShouldQueue
             ];
         }
 
+        // Each chunk is analysed independently to stay within context limits, then a
+        // synthesis pass merges the per-chunk summaries and deduplicates candidate tags
+        // into a single coherent result. Passing all chunks to one model call in sequence
+        // would risk truncation and produce lower-quality summaries for long articles.
         $chunkResponses = collect($analysisChunks)
             ->values()
             ->map(function (string $chunk, int $index) use ($analysisChunks, $preparedContent): array {
@@ -292,6 +296,8 @@ class AnalyseBookmark implements ShouldQueue
 
     private function shouldRetryWithSmallerChunks(Throwable $exception, string $input, int $budget, int $depth): bool
     {
+        // These strings are specific to OpenAI embedding error messages. If the provider
+        // changes or a different model is used, these patterns may need updating.
         if (! Str::contains($exception->getMessage(), [
             'maximum input length',
             '8192 tokens',
@@ -300,6 +306,8 @@ class AnalyseBookmark implements ShouldQueue
             return false;
         }
 
+        // Depth cap prevents unbounded recursion; the 200-character floor avoids splitting
+        // content so small that further chunking would be meaningless.
         if ($depth >= 3 || mb_strlen($input) <= 200 || $budget <= 200) {
             return false;
         }
@@ -370,6 +378,8 @@ class AnalyseBookmark implements ShouldQueue
 
     private function estimateTokens(string $content): int
     {
+        // Rough approximation (3 chars ≈ 1 token) used for debug logging only;
+        // actual chunking is done by character budget, not token count.
         return (int) ceil(mb_strlen($content) / 3);
     }
 }

@@ -94,14 +94,19 @@ class BookmarkContentPreparer
         $wordCount = str_word_count(preg_replace('/[^\pL\pN\s-]+/u', ' ', $paragraph) ?? '');
         $letterCount = preg_match_all('/\pL/u', $paragraph) ?: 0;
 
+        // Fewer than 8 letters is almost certainly punctuation, a number, or whitespace noise.
         if ($letterCount < 8) {
             return true;
         }
 
+        // Short paragraphs dense with URLs are typically navigation bars or link lists,
+        // not body content worth analysing.
         if ($urlCount >= 3 && $wordCount <= 40) {
             return true;
         }
 
+        // Short paragraphs dense with pipe/arrow separators are usually breadcrumbs or
+        // menu items scraped from the page structure.
         if ($separatorCount >= 3 && $wordCount <= 30) {
             return true;
         }
@@ -114,6 +119,9 @@ class BookmarkContentPreparer
         $wordCount = str_word_count(preg_replace('/[^\pL\pN\s-]+/u', ' ', $paragraph) ?? '');
         $sentenceCount = preg_match_all('/[.!?]/u', $paragraph) ?: 0;
 
+        // Only deduplicate short or single-sentence paragraphs. Longer repeated blocks
+        // may be intentional (e.g. a refrain or a legally required notice), so they are
+        // preserved even when their fingerprint has been seen before.
         return $wordCount <= 40 || $sentenceCount <= 1;
     }
 }

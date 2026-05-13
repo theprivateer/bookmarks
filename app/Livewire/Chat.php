@@ -31,6 +31,9 @@ class Chat extends Component
         $this->answer = '';
         $this->isStreaming = true;
 
+        // Defer ask() to the browser's event loop so Livewire can flush the updated
+        // properties (messages, isStreaming) to the DOM before the long-running stream
+        // blocks the response.
         $this->js('$wire.ask()');
     }
 
