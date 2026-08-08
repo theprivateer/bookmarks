@@ -47,11 +47,26 @@ class Account extends Component
             'password' => ['required', 'min:8', 'same:passwordConfirmation'],
         ]);
 
-        auth()->user()->update(['password' => $this->password]);
+        $user = auth()->user();
+
+        $user->update(['password' => $this->password]);
+
+        // A password change is the one moment a user expects previously issued
+        // credentials to stop working, so existing API tokens are revoked and the
+        // session id is rotated rather than left valid under the old password.
+        $revokedTokens = $user->tokens()->count();
+        $user->tokens()->delete();
+
+        session()->regenerate();
 
         $this->reset(['currentPassword', 'password', 'passwordConfirmation']);
 
-        Flux::toast(text: 'Password updated.', variant: 'success');
+        Flux::toast(
+            text: $revokedTokens > 0
+                ? "Password updated. {$revokedTokens} API token(s) were revoked."
+                : 'Password updated.',
+            variant: 'success',
+        );
     }
 
     public function createToken(): void

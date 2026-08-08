@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Rules\PublicHttpUrl;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -23,7 +24,7 @@ class StoreBookmarkRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'url' => ['required', 'url', 'max:2048'],
+            'url' => ['required', 'url:http,https', 'max:2048', new PublicHttpUrl],
         ];
     }
 }

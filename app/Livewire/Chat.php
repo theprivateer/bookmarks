@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Ai\Agents\BookmarkChat;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Livewire\Attributes\Layout;
@@ -19,6 +20,7 @@ class Chat extends Component
 
     public ?string $conversationId = null;
 
+    /** @var list<array{role: string, content: string}> */
     public array $messages = [];
 
     public bool $isStreaming = false;
@@ -43,6 +45,12 @@ class Chat extends Component
         $user = auth()->user();
 
         if ($this->conversationId) {
+            // conversationId is a public property, so it is settable from the client.
+            // Neither RemembersConversations::continue() nor the conversation store
+            // checks ownership, so without this a tampered id would load and reveal
+            // another user's history.
+            abort_unless($this->ownsConversation($this->conversationId), 403);
+
             $agent->continue($this->conversationId, as: $user);
         } else {
             $agent->forUser($user);
@@ -62,6 +70,18 @@ class Chat extends Component
         $this->answer = $stream->text;
         $this->isStreaming = false;
         $this->question = '';
+    }
+
+    /**
+     * The package stores conversations in a plain table with no model, so this
+     * checks ownership directly.
+     */
+    private function ownsConversation(string $conversationId): bool
+    {
+        return DB::table('agent_conversations')
+            ->where('id', $conversationId)
+            ->where('user_id', auth()->id())
+            ->exists();
     }
 
     public function newConversation(): void

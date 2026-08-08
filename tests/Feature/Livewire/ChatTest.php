@@ -4,6 +4,8 @@ use App\Ai\Agents\BookmarkChat;
 use App\Livewire\Chat;
 use App\Livewire\Header\AddBookmark;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 
 test('chat page renders for authenticated users', function () {
@@ -62,6 +64,56 @@ test('new conversation resets state', function () {
         ->assertSet('messages', [])
         ->assertSet('answer', '')
         ->assertSet('isStreaming', false);
+});
+
+test('cannot resume another users conversation', function () {
+    BookmarkChat::fake(['Leaked history...']);
+
+    $owner = User::factory()->create();
+    $attacker = User::factory()->create();
+
+    $conversationId = (string) Str::uuid();
+
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'user_id' => $owner->id,
+        'title' => 'Private conversation',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    Livewire::actingAs($attacker)
+        ->test(Chat::class)
+        ->set('conversationId', $conversationId)
+        ->set('question', 'What did they say?')
+        ->call('ask')
+        ->assertForbidden();
+
+    BookmarkChat::assertNeverPrompted();
+});
+
+test('can resume own conversation', function () {
+    BookmarkChat::fake(['Continuing...']);
+
+    $user = User::factory()->create();
+    $conversationId = (string) Str::uuid();
+
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'user_id' => $user->id,
+        'title' => 'My conversation',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    Livewire::actingAs($user)
+        ->test(Chat::class)
+        ->set('conversationId', $conversationId)
+        ->set('question', 'Carry on')
+        ->call('ask')
+        ->assertOk();
+
+    BookmarkChat::assertPrompted('Carry on');
 });
 
 test('empty question is rejected', function () {

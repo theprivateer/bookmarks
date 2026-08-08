@@ -3,19 +3,58 @@
 namespace App\Livewire\Header;
 
 use App\Jobs\ProcessBookmark;
+use App\Rules\PublicHttpUrl;
 use Flux\Flux;
 use Illuminate\View\View;
-use Livewire\Attributes\Validate;
 use Livewire\Component;
 
 class AddBookmark extends Component
 {
-    #[Validate('required|url|max:2048')]
     public string $newUrl = '';
+
+    /**
+     * Declared here rather than via #[Validate] because the rule is an object.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    protected function rules(): array
+    {
+        return [
+            'newUrl' => ['required', 'url:http,https', 'max:2048', new PublicHttpUrl],
+        ];
+    }
 
     public function addBookmark(): void
     {
         $this->validate();
+
+        // Saving a URL twice would pay for a second page fetch, markdown call and
+        // AI analysis to produce a duplicate row, so an existing bookmark is
+        // surfaced instead. Archived ones are restored rather than re-fetched.
+        $existing = auth()->user()->bookmarks()
+            ->withTrashed()
+            ->where('url', $this->newUrl)
+            ->first();
+
+        if ($existing !== null) {
+            $wasArchived = $existing->trashed();
+
+            if ($wasArchived) {
+                $existing->restore();
+            }
+
+            $this->reset('newUrl');
+
+            Flux::toast(
+                heading: $wasArchived ? 'Bookmark restored' : 'Already saved',
+                text: $wasArchived
+                    ? 'That link was archived, so we brought it back.'
+                    : 'That link is already in your bookmarks.',
+                variant: 'success',
+            );
+
+            return;
+        }
 
         $bookmark = auth()->user()->bookmarks()->create([
             'url' => $this->newUrl,

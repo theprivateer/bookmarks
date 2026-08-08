@@ -176,6 +176,33 @@ test('search returns bookmarks without embeddings via keyword match', function (
         ->toBe(['Known Bookmark']);
 });
 
+test('search finds pre-markdown bookmarks by their extracted text', function () {
+    // Default config prefers markdown_text, but bookmarks saved before markdown
+    // extraction existed only have extracted_text. Keying search off the config
+    // made their body text silently unsearchable.
+    config()->set('bookmarks.analysis_source_column', 'markdown_text');
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+
+    Bookmark::factory()->for($user)->create([
+        'status' => 'processed',
+        'title' => 'Legacy Bookmark',
+        'description' => 'Saved before markdown extraction existed.',
+        'extracted_text' => 'distinctive legacy phrase',
+        'markdown_text' => null,
+        'embedding' => null,
+    ]);
+
+    $component = Livewire::actingAs($user)
+        ->test(Home::class)
+        ->set('search', 'distinctive legacy phrase')
+        ->call('searchBookmarks');
+
+    expect(collect($component->viewData('bookmarks')->items())->pluck('title')->all())
+        ->toBe(['Legacy Bookmark']);
+});
+
 test('search can use extracted text when configured', function () {
     config()->set('bookmarks.analysis_source_column', 'extracted_text');
     Embeddings::fake([[array_fill(0, 1536, 0.1)]]);

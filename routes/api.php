@@ -13,7 +13,8 @@ Route::get('/user', function (Request $request) {
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::apiResource('bookmarks', BookmarkController::class)
         ->only(['index', 'store', 'show', 'update', 'destroy'])
-        ->withTrashed(['update']);
+        ->withTrashed(['update'])
+        ->middlewareFor('store', 'throttle:bookmarks-store');
 
     Route::get('tags', [TagController::class, 'index']);
 

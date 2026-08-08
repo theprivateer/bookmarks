@@ -1,5 +1,6 @@
 <?php
 
+use App\Rules\PublicHttpUrl;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,6 +18,19 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
+
+/*
+ * Named hosts resolve to a fixed public address so the suite never depends on
+ * live DNS. Literal IPs still fall through to the real range checks, which is
+ * what the SSRF tests assert against.
+ */
+pest()->beforeEach(function () {
+    PublicHttpUrl::resolveUsing(fn (string $host): array => filter_var($host, FILTER_VALIDATE_IP) !== false
+        ? [$host]
+        : ['93.184.216.34']);
+})->afterEach(function () {
+    PublicHttpUrl::resolveUsing(null);
+})->in('Feature', 'Unit');
 
 /*
 |--------------------------------------------------------------------------

@@ -1,10 +1,12 @@
 <?php
 
+use App\Jobs\ProcessBookmark;
 use App\Models\Bookmark;
 use App\Models\Collection;
 use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Ai\Embeddings;
 use Laravel\Sanctum\Sanctum;
 
@@ -25,6 +27,22 @@ test('can create a bookmark with valid url', function () {
         ->assertJsonPath('data.status', 'pending')
         ->assertJsonPath('data.domain', 'example.com')
         ->assertJsonPath('data.url', 'https://example.com/article');
+});
+
+test('bookmark creation is rate limited', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    Sanctum::actingAs($user);
+    RateLimiter::clear('bookmarks-store'.$user->id);
+
+    foreach (range(1, 20) as $index) {
+        $this->postJson('/api/v1/bookmarks', ['url' => "https://example.com/{$index}"])
+            ->assertCreated();
+    }
+
+    $this->postJson('/api/v1/bookmarks', ['url' => 'https://example.com/over-limit'])
+        ->assertStatus(429);
 });
 
 test('cannot create a bookmark without url', function () {
@@ -283,4 +301,57 @@ test('empty q parameter is ignored', function () {
     $this->getJson('/api/v1/bookmarks?q=')
         ->assertOk()
         ->assertJsonCount(3, 'data');
+});
+
+test('re-posting an existing url returns the existing bookmark instead of a duplicate', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    Sanctum::actingAs($user);
+
+    $existing = Bookmark::factory()->for($user)->processed()->create([
+        'url' => 'https://example.com/article',
+        'title' => 'Already Saved',
+    ]);
+
+    $this->postJson('/api/v1/bookmarks', ['url' => 'https://example.com/article'])
+        ->assertOk()
+        ->assertJsonPath('data.id', $existing->id)
+        ->assertJsonPath('data.title', 'Already Saved');
+
+    expect(Bookmark::where('user_id', $user->id)->count())->toBe(1);
+    Queue::assertNothingPushed();
+});
+
+test('re-posting an archived url restores it rather than creating a duplicate', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    Sanctum::actingAs($user);
+
+    $archived = Bookmark::factory()->for($user)->processed()->create([
+        'url' => 'https://example.com/archived',
+    ]);
+    $archived->delete();
+
+    $this->postJson('/api/v1/bookmarks', ['url' => 'https://example.com/archived'])
+        ->assertOk()
+        ->assertJsonPath('data.id', $archived->id);
+
+    expect($archived->fresh()->trashed())->toBeFalse()
+        ->and(Bookmark::withTrashed()->where('user_id', $user->id)->count())->toBe(1);
+    Queue::assertNothingPushed();
+});
+
+test('another users bookmark with the same url does not block creation', function () {
+    Queue::fake();
+
+    Bookmark::factory()->for(User::factory())->create(['url' => 'https://example.com/shared']);
+
+    Sanctum::actingAs(User::factory()->create());
+
+    $this->postJson('/api/v1/bookmarks', ['url' => 'https://example.com/shared'])
+        ->assertCreated();
+
+    Queue::assertPushed(ProcessBookmark::class, 1);
 });

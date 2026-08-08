@@ -22,6 +22,35 @@ class Bookmark extends Model
     use HasFactory, SoftDeletes;
 
     /**
+     * Columns permitted as the AI analysis source.
+     */
+    private const ANALYSIS_SOURCE_COLUMNS = ['extracted_text', 'markdown_text'];
+
+    /**
+     * Projection for search results, which are materialised in PHP rather than
+     * paginated in SQL. Omits the two longText source columns and the 1536-float
+     * embedding, none of which any resource or view reads — selecting them meant a
+     * broad search pulled the entire corpus into memory. Add to this list only if
+     * a listing genuinely needs the column.
+     */
+    private const LIST_COLUMNS = [
+        'id',
+        'user_id',
+        'url',
+        'domain',
+        'title',
+        'description',
+        'og_image_url',
+        'favicon_url',
+        'ai_summary',
+        'notes',
+        'status',
+        'deleted_at',
+        'created_at',
+        'updated_at',
+    ];
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
@@ -114,23 +143,62 @@ class Bookmark extends Model
         $term = '%'.$this->escapeLike($search).'%';
 
         return $query->where(function (Builder $query) use ($term): void {
-            $analysisSourceColumn = self::analysisSourceColumn();
-
+            // Deliberately not restricted to the configured analysis source. Bookmarks
+            // saved before markdown extraction existed only have extracted_text, and
+            // one whose markdown fetch failed is in the same position, so keying search
+            // off the config would make them silently unfindable by their body text.
             $query->where('title', 'ilike', $term)
                 ->orWhere('description', 'ilike', $term)
-                ->orWhere($analysisSourceColumn, 'ilike', $term);
+                ->orWhere('extracted_text', 'ilike', $term)
+                ->orWhere('markdown_text', 'ilike', $term);
         });
     }
 
+    /**
+     * Bookmarks with usable content in either source column.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeHasAnalysisSource(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->where(fn (Builder $q) => $q->whereNotNull('markdown_text')->where('markdown_text', '!=', ''))
+            ->orWhere(fn (Builder $q) => $q->whereNotNull('extracted_text')->where('extracted_text', '!=', ''))
+        );
+    }
+
+    /**
+     * The configured preference for which column feeds AI analysis.
+     */
     public static function analysisSourceColumn(): string
     {
         $column = config('bookmarks.analysis_source_column', 'markdown_text');
 
         // Whitelist prevents an unexpected config value from being interpolated
         // directly into a query as a column name.
-        return in_array($column, ['extracted_text', 'markdown_text'], true)
+        return in_array($column, self::ANALYSIS_SOURCE_COLUMNS, true)
             ? $column
             : 'markdown_text';
+    }
+
+    /**
+     * The column actually used for this bookmark, falling back to the other one
+     * when the preferred column is empty. Without the fallback, any bookmark whose
+     * markdown fetch failed would never be analysed even though extracted_text
+     * holds perfectly usable content.
+     */
+    public function resolvedAnalysisSourceColumn(): string
+    {
+        $preferred = self::analysisSourceColumn();
+
+        if (filled($this->getAttribute($preferred))) {
+            return $preferred;
+        }
+
+        $fallback = $preferred === 'markdown_text' ? 'extracted_text' : 'markdown_text';
+
+        return filled($this->getAttribute($fallback)) ? $fallback : $preferred;
     }
 
     /**
@@ -148,11 +216,11 @@ class Bookmark extends Model
         $keywordMatches = (clone $query)
             ->keywordSearch($search)
             ->latest()
-            ->get();
+            ->get(self::LIST_COLUMNS);
 
         $semanticMatches = (clone $query)
             ->whereVectorSimilarTo('embedding', $search, minSimilarity: 0.3)
-            ->get();
+            ->get(self::LIST_COLUMNS);
 
         /** @var SupportCollection<int, self> $mergedResults */
         $mergedResults = $keywordMatches

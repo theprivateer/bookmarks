@@ -40,10 +40,21 @@ class AnalyseBookmark implements ShouldQueue
     public function handle(): void
     {
         $bookmark = Bookmark::findOrFail($this->bookmarkId);
-        $sourceColumn = Bookmark::analysisSourceColumn();
+        $sourceColumn = $bookmark->resolvedAnalysisSourceColumn();
         $sourceText = $bookmark->getAttribute($sourceColumn);
 
+        // Previously a silent return, which left the bookmark as 'processed' with a
+        // null summary. That matches scopeNeedsAnalysis, so the UI offered a retry
+        // button that dispatched this job, which returned here again, forever, with
+        // nothing in the logs. Record it as a failure so the state is honest.
         if (blank($sourceText)) {
+            Log::warning('AnalyseBookmark skipped: no content in either source column', [
+                'bookmark_id' => $bookmark->id,
+                'preferred_source_column' => Bookmark::analysisSourceColumn(),
+            ]);
+
+            $bookmark->update(['status' => 'analysis_failed']);
+
             return;
         }
 

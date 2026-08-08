@@ -251,17 +251,66 @@ test('job continues when markdown service fails', function () {
         'status' => 'pending',
     ]);
 
+    // Readability returns null for trivial markup, so the body has to be long
+    // enough to be treated as article content for this assertion to mean anything.
+    $body = '<article><p>'.str_repeat(
+        'This is a substantial paragraph of article prose that Readability should treat as real body content. ',
+        12,
+    ).'</p></article>';
+
     Http::fake([
-        'https://example.com' => Http::response(makeHtml(['title' => 'Fallback Page'])),
+        'https://example.com' => Http::response(makeHtml(['title' => 'Fallback Page', 'body' => $body])),
         'https://markdown.new/' => Http::response('upstream error', 500),
     ]);
 
     (new ProcessBookmark($bookmark->id))->handle();
 
     expect($bookmark->fresh()->title)->toBe('Fallback Page')
-        ->and($bookmark->fresh()->extracted_text)->not->toBeNull()
+        ->and($bookmark->fresh()->extracted_text)->toContain('substantial paragraph of article prose')
         ->and($bookmark->fresh()->markdown_text)->toBeNull()
         ->and($bookmark->fresh()->status)->toBe('processed');
+});
+
+test('job preserves existing metadata when the page returns a 404', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'url' => 'https://example.com/gone',
+        'domain' => 'example.com',
+        'title' => 'Original Title',
+        'description' => 'Original description',
+        'extracted_text' => 'Original body text.',
+    ]);
+
+    Http::fake(['https://example.com/gone' => Http::response('<h1>Not Found</h1>', 404)]);
+
+    (new ProcessBookmark($bookmark->id))->handle();
+
+    $fresh = $bookmark->fresh();
+
+    expect($fresh->title)->toBe('Original Title')
+        ->and($fresh->description)->toBe('Original description')
+        ->and($fresh->extracted_text)->toBe('Original body text.')
+        ->and($fresh->status)->toBe('failed');
+});
+
+test('job retries rather than clobbering metadata on a server error', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'url' => 'https://example.com/broken',
+        'domain' => 'example.com',
+        'title' => 'Original Title',
+    ]);
+
+    Http::fake(['https://example.com/broken' => Http::response('oops', 503)]);
+
+    expect(fn () => (new ProcessBookmark($bookmark->id))->handle())
+        ->toThrow(RuntimeException::class, 'Fetch failed with status 503');
+
+    expect($bookmark->fresh()->title)->toBe('Original Title');
 });
 
 test('job posts expected payload to markdown service', function () {

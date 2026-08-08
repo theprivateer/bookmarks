@@ -9,6 +9,7 @@ use App\Http\Resources\BookmarkResource;
 use App\Jobs\ProcessBookmark;
 use App\Models\Bookmark;
 use App\Models\Tag;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
@@ -44,9 +45,27 @@ class BookmarkController extends Controller
         return BookmarkResource::collection($bookmarks);
     }
 
-    public function store(StoreBookmarkRequest $request): BookmarkResource
+    public function store(StoreBookmarkRequest $request): BookmarkResource|JsonResponse
     {
         $url = $request->validated('url');
+
+        // Re-posting a URL returns the existing bookmark with 200 rather than
+        // creating a duplicate and paying for a second fetch and analysis.
+        // Archived bookmarks are restored instead of being re-created.
+        $existing = $request->user()->bookmarks()
+            ->withTrashed()
+            ->where('url', $url)
+            ->first();
+
+        if ($existing !== null) {
+            if ($existing->trashed()) {
+                $existing->restore();
+            }
+
+            return BookmarkResource::make($existing->fresh()->load('tags', 'collections'))
+                ->response()
+                ->setStatusCode(Response::HTTP_OK);
+        }
 
         $bookmark = $request->user()->bookmarks()->create([
             'url' => $url,

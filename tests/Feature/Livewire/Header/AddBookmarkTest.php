@@ -51,3 +51,37 @@ test('url must be valid when adding a bookmark from the shared header', function
         ->call('addBookmark')
         ->assertHasErrors(['newUrl' => 'url']);
 });
+
+test('adding a url that is already saved does not create a duplicate', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    Bookmark::factory()->for($user)->processed()->create(['url' => 'https://example.com/saved']);
+
+    Livewire::actingAs($user)
+        ->test(AddBookmark::class)
+        ->set('newUrl', 'https://example.com/saved')
+        ->call('addBookmark')
+        ->assertHasNoErrors()
+        ->assertSet('newUrl', '');
+
+    expect(Bookmark::where('user_id', $user->id)->count())->toBe(1);
+    Queue::assertNothingPushed();
+});
+
+test('adding an archived url restores it instead of re-fetching', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $archived = Bookmark::factory()->for($user)->processed()->create(['url' => 'https://example.com/archived']);
+    $archived->delete();
+
+    Livewire::actingAs($user)
+        ->test(AddBookmark::class)
+        ->set('newUrl', 'https://example.com/archived')
+        ->call('addBookmark')
+        ->assertHasNoErrors();
+
+    expect($archived->fresh()->trashed())->toBeFalse();
+    Queue::assertNothingPushed();
+});

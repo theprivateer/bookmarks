@@ -176,12 +176,14 @@ test('job skips bookmarks with no extracted text', function () {
     Embeddings::assertNothingGenerated();
 });
 
-test('job skips bookmarks with no configured source text', function () {
+test('job falls back to extracted text when the configured source column is empty', function () {
     config()->set('bookmarks.analysis_source_column', 'markdown_text');
 
-    BookmarkAnalyser::fake()->preventStrayPrompts();
+    BookmarkAnalyser::fake([
+        ['summary' => 'Summarised from extracted text.', 'tags' => ['fallback']],
+    ]);
     BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
-    Embeddings::fake()->preventStrayEmbeddings();
+    Embeddings::fake();
 
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->processed()->create([
@@ -193,10 +195,43 @@ test('job skips bookmarks with no configured source text', function () {
 
     (new AnalyseBookmark($bookmark->id))->handle();
 
+    // Previously this was skipped, which stranded every bookmark whose markdown
+    // fetch failed in a permanent retry loop with no summary and no log line.
+    expect($bookmark->fresh()->ai_summary)->toBe('Summarised from extracted text.')
+        ->and($bookmark->fresh()->status)->toBe('processed');
+});
+
+test('job resolves the source column per bookmark', function () {
+    $preferred = Bookmark::factory()->processed()->create([
+        'markdown_text' => '# Markdown body',
+        'extracted_text' => 'Plain body text.',
+    ]);
+
+    $fallback = Bookmark::factory()->processed()->create([
+        'markdown_text' => null,
+        'extracted_text' => 'Older bookmark body text.',
+    ]);
+
+    expect($preferred->resolvedAnalysisSourceColumn())->toBe('markdown_text')
+        ->and($fallback->resolvedAnalysisSourceColumn())->toBe('extracted_text');
+});
+
+test('job marks the bookmark analysis_failed when neither source column has content', function () {
+    BookmarkAnalyser::fake()->preventStrayPrompts();
+    BookmarkAnalysisSynthesizer::fake()->preventStrayPrompts();
+    Embeddings::fake()->preventStrayEmbeddings();
+
+    $bookmark = Bookmark::factory()->for(User::factory())->create([
+        'status' => 'processed',
+        'markdown_text' => null,
+        'extracted_text' => null,
+        'ai_summary' => null,
+    ]);
+
+    (new AnalyseBookmark($bookmark->id))->handle();
+
     BookmarkAnalyser::assertNeverPrompted();
-    Embeddings::assertNothingGenerated();
-    expect($bookmark->fresh()->ai_summary)->toBeNull()
-        ->and($bookmark->fresh()->embedding)->toBeNull();
+    expect($bookmark->fresh()->status)->toBe('analysis_failed');
 });
 
 test('job transitions analysis_failed bookmark to processed on success', function () {

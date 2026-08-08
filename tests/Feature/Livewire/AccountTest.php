@@ -148,3 +148,21 @@ test('user cannot delete another users token', function () {
         ->call('confirmDeleteToken', $tokenId)
         ->call('deleteToken');
 })->throws(ModelNotFoundException::class);
+
+test('changing the password revokes existing api tokens', function () {
+    $user = User::factory()->create();
+    $user->createToken('cli');
+    $user->createToken('extension');
+
+    expect($user->tokens()->count())->toBe(2);
+
+    Livewire::actingAs($user)
+        ->test(Account::class)
+        ->set('currentPassword', 'password')
+        ->set('password', 'new-password-123')
+        ->set('passwordConfirmation', 'new-password-123')
+        ->call('updatePassword')
+        ->assertHasNoErrors();
+
+    expect($user->fresh()->tokens()->count())->toBe(0);
+});

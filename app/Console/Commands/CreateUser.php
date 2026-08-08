@@ -6,7 +6,6 @@ use App\Models\User;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Hash;
 
 use function Laravel\Prompts\intro;
 use function Laravel\Prompts\outro;
@@ -41,10 +40,12 @@ class CreateUser extends Command
                 : null,
         );
 
+        // Not hashed here: the model's 'password' cast handles it, matching how
+        // Account::updatePassword assigns it.
         $user = User::create([
             'name' => $name,
             'email' => $email,
-            'password' => Hash::make($password),
+            'password' => $password,
         ]);
 
         outro("User {$user->email} created successfully.");
