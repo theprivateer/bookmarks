@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (report only)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      # livewire/flux-pro is served from a private Composer repository, so
+      # installing dependencies is impossible without a licence.
+      - name: Authenticate with the Flux Pro repository
+        run: composer config --global http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE_KEY"
+        env:
+          FLUX_USERNAME: ${{ secrets.FLUX_USERNAME }}
+          FLUX_LICENSE_KEY: ${{ secrets.FLUX_LICENSE_KEY }}
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      # Reports formatting drift without failing the build. Run `vendor/bin/pint`
+      # locally to apply the fixes.
+      - name: Check formatting with Pint
+        id: pint
+        continue-on-error: true
+        run: vendor/bin/pint --test
+
+      - name: Summarise result
+        if: always()
+        run: |
+          if [ "${{ steps.pint.outcome }}" = "success" ]; then
+            echo "Pint found no formatting issues." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Pint reported formatting issues. Run \`vendor/bin/pint\` locally to fix them." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    services:
+      # pgvector image rather than plain postgres: a migration runs
+      # CREATE EXTENSION vector, and the embedding column needs it.
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: bookmarks_test
+          POSTGRES_USER: postgres
+          # Matches the empty DB_PASSWORD in .env.testing.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, pgsql, dom, libxml, mbstring
+          coverage: none
+
+      - name: Authenticate with the Flux Pro repository
+        run: composer config --global http-basic.composer.fluxui.dev "$FLUX_USERNAME" "$FLUX_LICENSE_KEY"
+        env:
+          FLUX_USERNAME: ${{ secrets.FLUX_USERNAME }}
+          FLUX_LICENSE_KEY: ${{ secrets.FLUX_LICENSE_KEY }}
+
+      - name: Install PHP dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci --ignore-scripts
+
+      # Tests that request a full page render layouts containing @vite, which
+      # throws unless the manifest exists.
+      - name: Build assets
+        run: npm run build
+
+      # Connection details come from the committed .env.testing; phpunit.xml
+      # pins the connection and database name.
+      - name: Run tests
+        run: php artisan test --compact

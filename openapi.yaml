@@ -2,7 +2,14 @@ openapi: 3.1.0
 info:
   title: Bookmarks API
   version: 1.0.0
-  description: AI-powered bookmark management API
+  description: |
+    AI-powered bookmark management API.
+
+    All endpoints require a Sanctum bearer token, created on the /account page of
+    the web UI. Changing your password revokes every existing token.
+
+    Rate limits: 60 requests/minute across the API, and 20 requests/minute for
+    creating bookmarks, keyed by authenticated user.
 
 servers:
   - url: http://bookmarks.test/api/v1
@@ -17,6 +24,21 @@ components:
       type: http
       scheme: bearer
       description: Sanctum API token
+
+  parameters:
+    BookmarkId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+    CollectionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
 
   schemas:
     Bookmark:
@@ -47,13 +69,28 @@ components:
         ai_summary:
           type: string
           nullable: true
+        notes:
+          type: string
+          nullable: true
+          description: Personal notes, not AI generated
         status:
           type: string
-          enum: [pending, processed, failed]
+          enum: [pending, processed, failed, analysis_failed]
+          description: |
+            pending — saved, awaiting content extraction.
+            processed — content extracted and AI analysis complete.
+            failed — the page could not be fetched.
+            analysis_failed — content extracted but AI analysis failed; retryable.
         tags:
           type: array
+          description: Tag names. Present only when the tags relation is loaded.
           items:
             type: string
+        collections:
+          type: array
+          description: Present only when the collections relation is loaded.
+          items:
+            $ref: '#/components/schemas/CollectionSummary'
         created_at:
           type: string
           format: date-time
@@ -64,6 +101,41 @@ components:
           type: string
           format: date-time
           nullable: true
+          description: Set when the bookmark is archived
+
+    CollectionSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+
+    Collection:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        bookmarks_count:
+          type: integer
+          description: Present only when the count is loaded
+        bookmarks:
+          type: array
+          description: Present only when the bookmarks relation is loaded
+          items:
+            $ref: '#/components/schemas/Bookmark'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
     Tag:
       type: object
@@ -77,15 +149,6 @@ components:
         bookmarks_count:
           type: integer
 
-    UpdateBookmarkRequest:
-      type: object
-      required:
-        - archived
-      properties:
-        archived:
-          type: boolean
-          description: True to archive (soft delete), false to restore
-
     StoreBookmarkRequest:
       type: object
       required:
@@ -95,6 +158,51 @@ components:
           type: string
           format: uri
           maxLength: 2048
+          description: |
+            Must be an http or https URL that resolves to a publicly routable
+            address. Loopback, private, reserved, and carrier-grade NAT
+            addresses are rejected.
+
+    UpdateBookmarkRequest:
+      type: object
+      description: All fields are optional; only those present are applied.
+      properties:
+        title:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+          maxLength: 2000
+        notes:
+          type: string
+          nullable: true
+          maxLength: 5000
+        tags:
+          type: array
+          maxItems: 20
+          description: Replaces the bookmark's tags. Unknown names are created.
+          items:
+            type: string
+            maxLength: 50
+        collection_ids:
+          type: array
+          description: |
+            Replaces the bookmark's collections. Ids you do not own are ignored.
+          items:
+            type: integer
+        archived:
+          type: boolean
+          description: True to archive (soft delete), false to restore
+
+    CollectionRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          maxLength: 100
 
     ValidationError:
       type: object
@@ -107,6 +215,20 @@ components:
             type: array
             items:
               type: string
+
+  responses:
+    Unauthenticated:
+      description: Unauthenticated
+    NotFound:
+      description: Not found
+    TooManyRequests:
+      description: Rate limit exceeded
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
 
 paths:
   /bookmarks:
@@ -124,15 +246,23 @@ paths:
           description: Filter by tag slug
           schema:
             type: string
+        - name: collection
+          in: query
+          description: Filter by collection slug
+          schema:
+            type: string
         - name: q
           in: query
-          description: Semantic search query — returns bookmarks ranked by meaning similarity
+          description: |
+            Combined search. Runs a keyword scan over titles, descriptions and
+            extracted content alongside a vector similarity scan, with keyword
+            matches ranked first.
           schema:
             type: string
             maxLength: 500
       responses:
         '200':
-          description: Paginated list of bookmarks
+          description: Paginated list of bookmarks, 15 per page
           content:
             application/json:
               schema:
@@ -147,11 +277,20 @@ paths:
                   meta:
                     type: object
         '401':
-          description: Unauthenticated
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
     post:
       summary: Create a bookmark
       operationId: createBookmark
+      description: |
+        Creates a bookmark with pending status and queues content extraction and
+        AI analysis. If the URL is already saved, the existing bookmark is
+        returned with 200 instead of being duplicated, and is restored first if
+        it was archived.
       requestBody:
         required: true
         content:
@@ -168,28 +307,8 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Bookmark'
-        '401':
-          description: Unauthenticated
-        '422':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ValidationError'
-
-  /bookmarks/{id}:
-    get:
-      summary: Show a bookmark
-      operationId: showBookmark
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
         '200':
-          description: Bookmark details
+          description: Bookmark already existed and was returned unchanged or restored
           content:
             application/json:
               schema:
@@ -198,19 +317,42 @@ paths:
                   data:
                     $ref: '#/components/schemas/Bookmark'
         '401':
-          description: Unauthenticated
-        '404':
-          description: Bookmark not found
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
-    patch:
-      summary: Archive or restore a bookmark
-      operationId: updateBookmark
+  /bookmarks/{id}:
+    get:
+      summary: Show a bookmark
+      operationId: showBookmark
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/BookmarkId'
+      responses:
+        '200':
+          description: Bookmark details, including tags and collections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Bookmark'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update a bookmark
+      operationId: updateBookmark
+      description: |
+        Updates editable fields, tag and collection membership, and archived
+        state. Archived bookmarks can be targeted, so sending
+        `{"archived": false}` restores one.
+      parameters:
+        - $ref: '#/components/parameters/BookmarkId'
       requestBody:
         required: true
         content:
@@ -228,37 +370,198 @@ paths:
                   data:
                     $ref: '#/components/schemas/Bookmark'
         '401':
-          description: Unauthenticated
+          $ref: '#/components/responses/Unauthenticated'
         '404':
-          description: Bookmark not found
+          $ref: '#/components/responses/NotFound'
         '422':
-          description: Validation error
+          $ref: '#/components/responses/ValidationError'
+
+    patch:
+      summary: Update a bookmark
+      operationId: patchBookmark
+      description: Identical to PUT on this endpoint.
+      parameters:
+        - $ref: '#/components/parameters/BookmarkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBookmarkRequest'
+      responses:
+        '200':
+          description: Bookmark updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ValidationError'
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Bookmark'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 
     delete:
-      summary: Delete a bookmark
+      summary: Archive a bookmark
       operationId: deleteBookmark
+      description: 'Soft-deletes the bookmark. Restore it with PUT `{"archived": false}`.'
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/BookmarkId'
       responses:
         '204':
-          description: Bookmark deleted
+          description: Bookmark archived
         '401':
-          description: Unauthenticated
+          $ref: '#/components/responses/Unauthenticated'
         '404':
-          description: Bookmark not found
+          $ref: '#/components/responses/NotFound'
+
+  /collections:
+    get:
+      summary: List collections
+      operationId: listCollections
+      description: Returns all of the authenticated user's collections, ordered by name, with bookmark counts.
+      responses:
+        '200':
+          description: List of collections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Collection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+    post:
+      summary: Create a collection
+      operationId: createCollection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionRequest'
+      responses:
+        '201':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Collection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /collections/{id}:
+    get:
+      summary: Show a collection
+      operationId: showCollection
+      description: Returns the collection with its bookmarks and their tags.
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+      responses:
+        '200':
+          description: Collection details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Collection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Rename a collection
+      operationId: updateCollection
+      description: The slug is regenerated from the new name.
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionRequest'
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Collection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    patch:
+      summary: Rename a collection
+      operationId: patchCollection
+      description: Identical to PUT on this endpoint.
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionRequest'
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Collection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      summary: Delete a collection
+      operationId: deleteCollection
+      description: Deletes the collection. Bookmarks in it are not deleted.
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+      responses:
+        '204':
+          description: Collection deleted
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /tags:
     get:
       summary: List tags with bookmark counts
       operationId: listTags
+      description: Returns only tags attached to the authenticated user's bookmarks, with counts scoped to that user.
       responses:
         '200':
           description: List of tags
@@ -272,4 +575,4 @@ paths:
                     items:
                       $ref: '#/components/schemas/Tag'
         '401':
-          description: Unauthenticated
+          $ref: '#/components/responses/Unauthenticated'
