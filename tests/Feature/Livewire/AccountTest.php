@@ -3,7 +3,6 @@
 use App\Livewire\Account;
 use App\Livewire\Header\AddBookmark;
 use App\Models\User;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 
@@ -146,8 +145,11 @@ test('user cannot delete another users token', function () {
     Livewire::actingAs($user)
         ->test(Account::class)
         ->call('confirmDeleteToken', $tokenId)
-        ->call('deleteToken');
-})->throws(ModelNotFoundException::class);
+        ->call('deleteToken')
+        ->assertNotFound();
+
+    expect($other->tokens()->find($tokenId))->not->toBeNull();
+});
 
 test('changing the password revokes existing api tokens', function () {
     $user = User::factory()->create();

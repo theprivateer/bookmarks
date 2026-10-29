@@ -7,7 +7,6 @@ use App\Models\Bookmark;
 use App\Models\Collection;
 use App\Models\Tag;
 use App\Models\User;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Laravel\Ai\Embeddings;
 use Livewire\Livewire;
 
@@ -448,11 +447,15 @@ test('can retry analysis for processed bookmark with null summary', function () 
 });
 
 test('cannot retry analysis for a fully processed bookmark', function () {
+    Queue::fake();
+
     $user = User::factory()->create();
     $bookmark = Bookmark::factory()->for($user)->processed()->create();
 
-    expect(fn () => Livewire::actingAs($user)
+    Livewire::actingAs($user)
         ->test(Home::class)
         ->call('retryAnalysis', $bookmark->id)
-    )->toThrow(ModelNotFoundException::class);
+        ->assertNotFound();
+
+    Queue::assertNothingPushed();
 });

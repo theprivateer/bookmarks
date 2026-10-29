@@ -61,6 +61,21 @@ test('can show a collection with its bookmarks', function () {
         ->assertJsonCount(1, 'data.bookmarks');
 });
 
+test('a collections nested bookmarks omit extracted text', function () {
+    $user = User::factory()->create();
+    $collection = Collection::factory()->for($user)->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'extracted_text' => 'The full body of the article.',
+    ]);
+    $bookmark->collections()->attach($collection->id);
+
+    Sanctum::actingAs($user);
+
+    $this->getJson("/api/v1/collections/{$collection->id}")
+        ->assertOk()
+        ->assertJsonMissingPath('data.bookmarks.0.extracted_text');
+});
+
 test('cannot show another users collection', function () {
     $other = User::factory()->create();
     $collection = Collection::factory()->for($other)->create();

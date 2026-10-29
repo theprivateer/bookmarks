@@ -69,6 +69,15 @@ components:
         ai_summary:
           type: string
           nullable: true
+        extracted_text:
+          type: string
+          nullable: true
+          description: |
+            Readability-extracted plain text of the page, null until content
+            extraction has run. Present only on single-bookmark responses
+            (show, create, update); omitted from list, search, and nested
+            collection responses, where returning the full body of every
+            bookmark on the page would be prohibitively large.
         notes:
           type: string
           nullable: true
@@ -262,7 +271,9 @@ paths:
             maxLength: 500
       responses:
         '200':
-          description: Paginated list of bookmarks, 15 per page
+          description: |
+            Paginated list of bookmarks, 15 per page. Items omit extracted_text;
+            fetch a single bookmark to read it.
           content:
             application/json:
               schema:
@@ -331,7 +342,7 @@ paths:
         - $ref: '#/components/parameters/BookmarkId'
       responses:
         '200':
-          description: Bookmark details, including tags and collections
+          description: Bookmark details, including extracted_text, tags, and collections
           content:
             application/json:
               schema:
@@ -467,7 +478,9 @@ paths:
     get:
       summary: Show a collection
       operationId: showCollection
-      description: Returns the collection with its bookmarks and their tags.
+      description: |
+        Returns the collection with its bookmarks and their tags. The nested
+        bookmarks omit extracted_text.
       parameters:
         - $ref: '#/components/parameters/CollectionId'
       responses:

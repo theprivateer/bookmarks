@@ -29,9 +29,10 @@ class Bookmark extends Model
     /**
      * Projection for search results, which are materialised in PHP rather than
      * paginated in SQL. Omits the two longText source columns and the 1536-float
-     * embedding, none of which any resource or view reads — selecting them meant a
-     * broad search pulled the entire corpus into memory. Add to this list only if
-     * a listing genuinely needs the column.
+     * embedding — selecting them meant a broad search pulled the entire corpus into
+     * memory. BookmarkResource exposes extracted_text only on single-bookmark
+     * responses, which load the full row, so nothing here reads it. Add to this list
+     * only if a listing genuinely needs the column.
      */
     private const LIST_COLUMNS = [
         'id',

@@ -5,7 +5,6 @@ use App\Models\Bookmark;
 use App\Models\Collection;
 use App\Models\Tag;
 use App\Models\User;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Livewire\Livewire;
 
 test('can open edit modal and see bookmark data', function () {
@@ -124,10 +123,12 @@ test('cannot edit another users bookmark', function () {
         ->get('/')
         ->assertOk();
 
-    expect(fn () => Livewire::actingAs($user)
+    Livewire::actingAs($user)
         ->test(Home::class)
         ->call('editBookmark', $bookmark->id)
-    )->toThrow(ModelNotFoundException::class);
+        ->assertNotFound();
+
+    expect($bookmark->fresh()->title)->toBe($bookmark->title);
 });
 
 test('notes are displayed on bookmark cards', function () {

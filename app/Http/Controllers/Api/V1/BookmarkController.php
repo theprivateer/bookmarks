@@ -63,6 +63,7 @@ class BookmarkController extends Controller
             }
 
             return BookmarkResource::make($existing->fresh()->load('tags', 'collections'))
+                ->withExtractedText()
                 ->response()
                 ->setStatusCode(Response::HTTP_OK);
         }
@@ -75,7 +76,7 @@ class BookmarkController extends Controller
 
         ProcessBookmark::dispatch($bookmark->id);
 
-        return BookmarkResource::make($bookmark);
+        return BookmarkResource::make($bookmark)->withExtractedText();
     }
 
     public function show(Request $request, Bookmark $bookmark): BookmarkResource
@@ -84,7 +85,7 @@ class BookmarkController extends Controller
 
         $bookmark->load('tags', 'collections');
 
-        return BookmarkResource::make($bookmark);
+        return BookmarkResource::make($bookmark)->withExtractedText();
     }
 
     public function update(UpdateBookmarkRequest $request, int $id): BookmarkResource
@@ -133,7 +134,7 @@ class BookmarkController extends Controller
 
         $bookmark->load('tags', 'collections');
 
-        return BookmarkResource::make($bookmark->fresh());
+        return BookmarkResource::make($bookmark->fresh())->withExtractedText();
     }
 
     public function destroy(Request $request, Bookmark $bookmark): Response

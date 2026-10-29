@@ -103,6 +103,100 @@ test('can show a single bookmark', function () {
         ->assertJsonPath('data.id', $bookmark->id);
 });
 
+test('showing a bookmark includes its extracted text', function () {
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'extracted_text' => 'The full body of the article.',
+    ]);
+
+    Sanctum::actingAs($user);
+
+    $this->getJson("/api/v1/bookmarks/{$bookmark->id}")
+        ->assertOk()
+        ->assertJsonPath('data.extracted_text', 'The full body of the article.');
+});
+
+test('showing a bookmark with no extracted text returns null', function () {
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->create();
+
+    Sanctum::actingAs($user);
+
+    $this->getJson("/api/v1/bookmarks/{$bookmark->id}")
+        ->assertOk()
+        ->assertJsonPath('data.extracted_text', null);
+});
+
+test('updating a bookmark returns its extracted text', function () {
+    $user = User::factory()->create();
+    $bookmark = Bookmark::factory()->for($user)->processed()->create([
+        'extracted_text' => 'The full body of the article.',
+    ]);
+
+    Sanctum::actingAs($user);
+
+    $this->patchJson("/api/v1/bookmarks/{$bookmark->id}", ['title' => 'Renamed'])
+        ->assertOk()
+        ->assertJsonPath('data.extracted_text', 'The full body of the article.');
+});
+
+test('creating a bookmark returns a null extracted text before processing', function () {
+    Queue::fake();
+
+    Sanctum::actingAs(User::factory()->create());
+
+    $this->postJson('/api/v1/bookmarks', ['url' => 'https://example.com/article'])
+        ->assertCreated()
+        ->assertJsonPath('data.extracted_text', null);
+});
+
+test('re-posting an existing url returns its extracted text', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    Sanctum::actingAs($user);
+
+    Bookmark::factory()->for($user)->processed()->create([
+        'url' => 'https://example.com/article',
+        'extracted_text' => 'The full body of the article.',
+    ]);
+
+    $this->postJson('/api/v1/bookmarks', ['url' => 'https://example.com/article'])
+        ->assertOk()
+        ->assertJsonPath('data.extracted_text', 'The full body of the article.');
+});
+
+test('listing bookmarks omits extracted text to keep the payload small', function () {
+    $user = User::factory()->create();
+    Bookmark::factory()->for($user)->processed()->create([
+        'extracted_text' => 'The full body of the article.',
+    ]);
+
+    Sanctum::actingAs($user);
+
+    $this->getJson('/api/v1/bookmarks')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonMissingPath('data.0.extracted_text');
+});
+
+test('searching bookmarks omits extracted text', function () {
+    Embeddings::fake([[array_fill(0, 1536, 0.1)]]);
+
+    $user = User::factory()->create();
+    Bookmark::factory()->for($user)->processed()->create([
+        'title' => 'Knownterm Result',
+        'extracted_text' => 'The full body of the article.',
+    ]);
+
+    Sanctum::actingAs($user);
+
+    $this->getJson('/api/v1/bookmarks?q=Knownterm')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonMissingPath('data.0.extracted_text');
+});
+
 test('cannot show another users bookmark', function () {
     $otherUser = User::factory()->create();
     $bookmark = Bookmark::factory()->for($otherUser)->create();

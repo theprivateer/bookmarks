@@ -4,7 +4,6 @@ use App\Livewire\Home;
 use App\Models\Bookmark;
 use App\Models\Collection;
 use App\Models\User;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Livewire\Livewire;
 
 test('can create a collection', function () {
@@ -122,8 +121,10 @@ test('cannot delete another users collection', function () {
     $other = User::factory()->create();
     $collection = Collection::factory()->for($other)->create();
 
-    expect(fn () => Livewire::actingAs($user)
+    Livewire::actingAs($user)
         ->test(Home::class)
         ->call('deleteCollection', $collection->id)
-    )->toThrow(ModelNotFoundException::class);
+        ->assertNotFound();
+
+    $this->assertModelExists($collection);
 });

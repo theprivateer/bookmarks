@@ -186,9 +186,11 @@ curl -X POST https://bookmarks.test/api/v1/bookmarks \
 |---|---|---|
 | GET | `/api/v1/bookmarks` | Paginated list (15 per page). Query params: `page`, `tag` (slug), `collection` (slug), `q` (combined keyword + semantic search, max 500 chars). |
 | POST | `/api/v1/bookmarks` | Create a bookmark from a `url`. Returns `201` for a new bookmark, or `200` with the existing one if the URL was already saved. |
-| GET | `/api/v1/bookmarks/{id}` | Show a bookmark with its tags and collections. |
+| GET | `/api/v1/bookmarks/{id}` | Show a bookmark with its `extracted_text`, tags, and collections. |
 | PUT/PATCH | `/api/v1/bookmarks/{id}` | Update `title`, `description`, `notes`, `tags`, `collection_ids`, or `archived`. Works on archived bookmarks, so `{"archived": false}` restores one. |
 | DELETE | `/api/v1/bookmarks/{id}` | Archive (soft-delete) a bookmark. |
+
+The extracted page text is returned only by the single-bookmark endpoints — show, create, and update. Listings, search results, and the bookmarks nested inside a collection omit `extracted_text`, because a 15-item page would otherwise carry the full body of fifteen pages.
 
 #### Collections
 
